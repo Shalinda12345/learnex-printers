@@ -17,9 +17,13 @@ const TEST_DATABASE_URL = testUrl.toString();
 const deadUrl = new URL(TEST_DATABASE_URL);
 deadUrl.port = "1";
 
+// The test servers get their own owner-setup code (never the real one).
+const TEST_SETUP_CODE = "test-setup-" + Math.random().toString(36).slice(2);
+
 const env = {
   ...process.env,
   TEST_DATABASE_URL,
+  TEST_SETUP_CODE,
   TEST_BASE_URL: "http://localhost:3311",
   TEST_DEAD_DB_BASE_URL: "http://localhost:3312",
   TEST_APP_PORT: "3311",
@@ -37,7 +41,7 @@ const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
 function startServer(port, databaseUrl) {
   return spawn(process.execPath, [nextBin, "start", "-p", String(port)], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env: { ...process.env, DATABASE_URL: databaseUrl, AUTH_SETUP_CODE: TEST_SETUP_CODE },
     stdio: "ignore",
   });
 }
@@ -64,7 +68,7 @@ try {
   mkdirSync(path.join(root, "test-results"), { recursive: true });
   const logPath = path.join(root, "test-results", "db-tests.log");
   const log = createWriteStream(logPath);
-  const files = ["01-database", "02-api", "03-ui", "04-limitations"].map((f) => `tests/${f}.test.mjs`);
+  const files = ["01-database", "02-api", "03-ui", "05-auth", "04-limitations"].map((f) => `tests/${f}.test.mjs`);
   const run = spawn(process.execPath, ["--test", "--test-concurrency=1", "--test-reporter=spec", ...files], {
     cwd: root,
     env,

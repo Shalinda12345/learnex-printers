@@ -1,6 +1,8 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import {
+  Client,
+  asOwner,
   api,
   backupData,
   count,
@@ -13,6 +15,7 @@ import {
   wipeDatabase,
 } from "./helpers.mjs";
 
+before(asOwner); // every API call is made as the owner
 after(() => pool.end());
 
 const dataUrl =
@@ -194,7 +197,11 @@ describe("empty database", () => {
     const r = await api("/data");
     log(`GET /data -> ${r.status}`, JSON.stringify(r.body));
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body, { initialized: false, stores: {} });
+    assert.equal(r.body.initialized, false);
+    assert.deepEqual(r.body.stores, {});
+    // the owner may load and save every module
+    assert.equal(Object.keys(r.body.access).length, 12);
+    assert.ok(Object.values(r.body.access).every((a) => a === "write"));
   });
 });
 
@@ -535,8 +542,9 @@ describe("reset and server errors", () => {
   });
 
   test("API-31 if the database is down, the API answers 500 with the reason", async () => {
-    const r = await api("/data", undefined, DEAD_DB_BASE);
-    log(`GET /data on a server whose database is unreachable -> ${r.status} ${r.body?.error}`);
+    // /api/auth/me is the first thing the app asks for; it must reach the database.
+    const r = await new Client(DEAD_DB_BASE).get("/api/auth/me");
+    log(`GET /api/auth/me on a server whose database is unreachable -> ${r.status} ${r.body?.error}`);
     assert.equal(r.status, 500);
     assert.match(r.body.error, /Database error: .*ECONNREFUSED/);
   });
