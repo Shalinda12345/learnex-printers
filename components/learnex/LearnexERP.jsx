@@ -47,17 +47,23 @@ import {
   SEED_USERS,
 } from "@/lib/learnex/seed";
 import { SalesOrders } from "@/components/learnex/modules/SalesOrders";
-import { SaveStatusBadge } from "@/components/learnex/ui";
+import { Modal, SaveStatusBadge } from "@/components/learnex/ui";
 import { SettingsPage } from "@/components/learnex/modules/SettingsPage";
 import { Suppliers } from "@/components/learnex/modules/Suppliers";
 import { downloadBackup } from "@/lib/learnex/backup";
-import { usePersistentState } from "@/lib/learnex/persistence";
+import { canWrite, usePersistentState } from "@/lib/learnex/persistence";
+import { PasswordChangeForm } from "@/components/learnex/AuthScreens";
+import { SCREEN_PERMISSIONS } from "@/lib/auth/permissions";
 
 /* =====================================================================
    APP ROOT
 ===================================================================== */
-export function LearnexERP() {
-  const [view, setView] = useState("dashboard");
+export function LearnexERP({ auth }) {
+  // Screens this user's roles allow (the server enforces the same rules on every save).
+  const canOpen = (key) => (SCREEN_PERMISSIONS[key] || []).some(auth.can);
+  const [view, setView] = useState(() => Object.keys(SCREEN_PERMISSIONS).find(canOpen) || null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const [dark, setDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [toast, setToast] = useState(null);
@@ -82,6 +88,7 @@ export function LearnexERP() {
   // browser that already has saved data from before the accounting upgrade.
   // Nothing existing is modified — only missing accounts are added.
   useEffect(() => {
+    if (!canWrite("cashAccounts")) return;
     const missing = SEED_CASH_ACCOUNTS.filter((s) => !(cashAccounts || []).some((a) => a.id === s.id));
     if (missing.length) setCashAccounts((prev) => [...missing, ...(prev || [])]);
   }, [cashAccounts]);
@@ -91,10 +98,12 @@ export function LearnexERP() {
   // exactly as they were — only the account they sit in changes, so the totals
   // and the profit figure do not move.
   useEffect(() => {
+    if (!canWrite("cashAccounts")) return;
     if ((cashAccounts || []).some((a) => a.id === LEGACY_PURCHASES_CASH_ID))
       setCashAccounts((prev) => (prev || []).filter((a) => a.id !== LEGACY_PURCHASES_CASH_ID));
   }, [cashAccounts]);
   useEffect(() => {
+    if (!canWrite("ledger")) return;
     if ((ledger || []).some((t) => t.account === LEGACY_PURCHASES_CASH_ID))
       setLedger((prev) =>
         (prev || []).map((t) =>
@@ -103,6 +112,7 @@ export function LearnexERP() {
       );
   }, [ledger]);
   useEffect(() => {
+    if (!canWrite("purchaseOrders")) return;
     if ((purchaseOrders || []).some((o) => o.cashAccount === LEGACY_PURCHASES_CASH_ID))
       setPurchaseOrders((prev) =>
         (prev || []).map((o) =>
@@ -136,7 +146,7 @@ export function LearnexERP() {
     { key: "accounting", label: "Accounting", icon: ReceiptText },
     { key: "reports", label: "Reports", icon: BarChart3 },
     { key: "settings", label: "Settings", icon: Settings },
-  ];
+  ].filter((item) => canOpen(item.key));
   const theme = { dark, cardBg, subText, hoverRow, inputBg };
   const store = {
     products,
@@ -164,8 +174,13 @@ export function LearnexERP() {
     users,
     setUsers,
   };
-  const currentUser = users[0] || { name: "User", role: "" };
-  const helpers = { setToast, currentUser };
+  // The signed-in account (the old "users" list is no longer who is using the app).
+  const currentUser = {
+    name: auth.user.name,
+    username: auth.user.username,
+    role: auth.user.roles.map((r) => r.name).join(", "),
+  };
+  const helpers = { setToast, currentUser, auth };
   const currentUserInitials =
     currentUser.name
       .split(" ")
@@ -236,34 +251,83 @@ export function LearnexERP() {
             </div>
             <div className="flex items-center gap-3">
               <SaveStatusBadge />
-              <button
-                onClick={() => downloadBackup(store, setToast)}
-                title="Download a full backup of everything in the system as one file"
-                className={`flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl border transition-colors ${dark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
-              >
-                <Download size={14} />
-                <span className="hidden sm:inline">Backup</span>
-              </button>
+              {auth.can("data.backup") && (
+                <button
+                  onClick={() => downloadBackup(store, setToast)}
+                  title="Download a full backup of everything in the system as one file"
+                  className={`flex items-center gap-2 text-xs font-medium px-3 py-2 rounded-xl border transition-colors ${dark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
+                >
+                  <Download size={14} />
+                  <span className="hidden sm:inline">Backup</span>
+                </button>
+              )}
               <button
                 onClick={() => setDark((d) => !d)}
                 className={`w-9 h-9 rounded-xl border flex items-center justify-center ${dark ? "border-slate-700 text-amber-300" : "border-slate-200 text-slate-600"}`}
               >
                 {dark ? <Sun size={16} /> : <Moon size={16} />}
               </button>
-              <div className="flex items-center gap-2 pl-3 border-l border-slate-200/20">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
-                  {currentUserInitials}
-                </div>
-                {sidebarOpen && (
-                  <div className="hidden sm:block">
-                    <p className="text-sm font-medium leading-tight">{currentUser.name}</p>
-                    <p className={`text-xs ${subText} leading-tight`}>{currentUser.role}</p>
+              <div className="relative pl-3 border-l border-slate-200/20">
+                <button
+                  onClick={() => setUserMenuOpen((o) => !o)}
+                  title="Account"
+                  className="flex items-center gap-2 bg-transparent text-left cursor-pointer"
+                  style={{ border: "none", padding: 0, color: "inherit", font: "inherit" }}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
+                    {currentUserInitials}
+                  </div>
+                  {sidebarOpen && (
+                    <div className="hidden sm:block">
+                      <p className="text-sm font-medium leading-tight">{currentUser.name}</p>
+                      <p className={`text-xs ${subText} leading-tight`}>{currentUser.role}</p>
+                    </div>
+                  )}
+                </button>
+                {userMenuOpen && (
+                  <div
+                    className={`rounded-xl border shadow-lg z-50 p-2 ${cardBg}`}
+                    style={{ position: "absolute", right: 0, top: "calc(100% + 10px)", width: 230 }}
+                  >
+                    <div className={`px-3 py-2 border-b ${dark ? "border-slate-800" : "border-slate-100"}`}>
+                      <p className="text-sm font-medium truncate">{currentUser.name}</p>
+                      <p className={`text-xs ${subText} truncate`}>
+                        {"@"}
+                        {currentUser.username}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        setChangingPassword(true);
+                      }}
+                      className={`w-full text-left px-3 py-2 mt-1 rounded-lg text-sm bg-transparent ${hoverRow}`}
+                      style={{ border: "none", color: "inherit", cursor: "pointer" }}
+                    >
+                      Change password
+                    </button>
+                    <button
+                      onClick={() => auth.signOut()}
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm text-red-600 bg-transparent hover:bg-red-50"
+                      style={{ border: "none", cursor: "pointer" }}
+                    >
+                      Sign out
+                    </button>
                   </div>
                 )}
               </div>
             </div>
           </header>
           <main className="flex-1 overflow-y-auto p-6">
+            {!view && (
+              <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm max-w-xl`}>
+                <h3 className="font-semibold mb-1">No access yet</h3>
+                <p className={`text-sm ${subText}`}>
+                  Your account doesn&apos;t have any roles that open a part of the system. Ask the owner or an
+                  administrator to give you a role.
+                </p>
+              </div>
+            )}
             {view === "dashboard" && <Dashboard {...theme} {...store} />}
             {view === "pos" && <POS {...theme} {...store} {...helpers} />}
             {view === "inventory" && <Inventory {...theme} {...store} {...helpers} />}
@@ -280,6 +344,23 @@ export function LearnexERP() {
           </main>
         </div>
       </div>
+      {changingPassword && (
+        <Modal
+          title="Change your password"
+          onClose={() => setChangingPassword(false)}
+          cardBg={cardBg}
+          dark={dark}
+        >
+          <div className="p-5">
+            <PasswordChangeForm
+              onDone={() => {
+                setChangingPassword(false);
+                setToast("Password changed. Any other devices you were signed in on have been signed out.");
+              }}
+            />
+          </div>
+        </Modal>
+      )}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50" style={{ animation: "fadein .2s ease-out" }}>
           <div className="bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 max-w-sm border border-slate-700">

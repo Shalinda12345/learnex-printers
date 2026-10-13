@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  asOwner,
   DEAD_DB_BASE,
   FIXTURE_BACKUP,
   api,
@@ -25,6 +26,7 @@ import {
 
 let browser;
 before(async () => {
+  await asOwner(); // pages open signed in as the owner
   browser = await launchBrowser();
 });
 after(async () => {

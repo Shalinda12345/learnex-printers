@@ -1,15 +1,23 @@
 import "server-only";
-import { BadRequestError } from "@/lib/server/learnex/repository";
+import { BadRequestError, HttpError } from "@/lib/server/errors";
+
+// API responses carry business and account data: never cache them.
+const NO_STORE = { "Cache-Control": "no-store" };
 
 // Runs a handler and turns its result / failure into a JSON response.
 export async function respond(fn: () => Promise<unknown>) {
   try {
     const result = await fn();
-    return Response.json(result ?? { ok: true });
+    return Response.json(result ?? { ok: true }, { headers: NO_STORE });
   } catch (e) {
-    if (e instanceof BadRequestError) return Response.json({ error: e.message }, { status: 400 });
+    if (e instanceof HttpError) {
+      return Response.json({ error: e.message, code: e.code }, { status: e.status, headers: NO_STORE });
+    }
     console.error("[learnex api]", e);
-    return Response.json({ error: `Database error: ${describeError(e)}` }, { status: 500 });
+    return Response.json(
+      { error: `Database error: ${describeError(e)}` },
+      { status: 500, headers: NO_STORE },
+    );
   }
 }
 

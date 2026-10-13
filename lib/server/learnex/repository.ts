@@ -13,10 +13,24 @@ import {
   type SingleStore,
 } from "@/lib/server/learnex/stores";
 
-type Rec = Record<string, unknown>;
+import { BadRequestError, ForbiddenError } from "@/lib/server/errors";
+import { audit, type Actor } from "@/lib/server/audit";
+import { STORE_LABELS, type StoreAccess, type StoreKey } from "@/lib/auth/permissions";
 
-/** A request the server refuses (bad shape / invalid ids) — reported as HTTP 400. */
-export class BadRequestError extends Error {}
+export { BadRequestError };
+
+type Rec = Record<string, unknown>;
+export type AccessMap = Partial<Record<StoreKey, StoreAccess>>;
+
+/** What one saved change did, for the activity log. */
+interface ChangeSummary {
+  store: string;
+  created?: number;
+  updated?: number;
+  deleted?: number;
+  replaced?: boolean;
+  ids?: unknown[];
+}
 
 export interface StoreChange {
   store: string;
@@ -243,9 +257,20 @@ async function syncList(client: PoolClient, def: ListStore, change: StoreChange)
 
   if (change.replace) await client.query(`DELETE FROM ${q(def.table)}`);
   const deleteIds = deletes.map((id) => checkId(def, id));
+  let deleted = 0;
   if (deleteIds.length) {
-    await client.query(`DELETE FROM ${q(def.table)} WHERE "id" = ANY($1::${def.idType}[])`, [deleteIds]);
+    deleted = (
+      await client.query(`DELETE FROM ${q(def.table)} WHERE "id" = ANY($1::${def.idType}[])`, [deleteIds])
+    ).rowCount!;
   }
+  const existing = upsertIds.length
+    ? (
+        await client.query(
+          `SELECT count(*)::int AS n FROM ${q(def.table)} WHERE "id" = ANY($1::${def.idType}[])`,
+          [upsertIds],
+        )
+      ).rows[0].n
+    : 0;
   await writeListRecords(client, def, upserts, position);
   if (order.length && !change.replace) {
     await client.query(
@@ -256,6 +281,15 @@ async function syncList(client: PoolClient, def: ListStore, change: StoreChange)
     );
   }
   await markInitialized(client, def.key);
+  const summary: ChangeSummary = {
+    store: def.key,
+    created: upsertIds.length - existing,
+    updated: existing,
+    deleted,
+    ids: [...upsertIds, ...deleteIds].slice(0, 50),
+  };
+  if (change.replace) summary.replaced = true;
+  return summary;
 }
 
 async function loadList(def: ListStore) {
@@ -291,6 +325,7 @@ async function syncSingle(client: PoolClient, def: SingleStore, value: unknown) 
   ];
   await insertRows(client, def.table, cols, [{ ...row, id: 1, extra }], true);
   await markInitialized(client, def.key);
+  return { store: def.key, updated: 1 } as ChangeSummary;
 }
 
 async function syncReplace(client: PoolClient, def: ReplaceStore, value: unknown) {
@@ -303,29 +338,36 @@ async function syncReplace(client: PoolClient, def: ReplaceStore, value: unknown
   });
   await insertRows(client, def.table, tableColumns(def.fields), rows);
   await markInitialized(client, def.key);
+  return { store: def.key, replaced: true, created: rows.length } as ChangeSummary;
 }
 
 /* ------------------------------------------------------------------ */
 /* public API                                                           */
 /* ------------------------------------------------------------------ */
 
-async function applyChange(client: PoolClient, change: StoreChange) {
+async function applyChange(client: PoolClient, change: StoreChange): Promise<ChangeSummary> {
   if (!isPlainObject(change)) throw new BadRequestError("each change must be an object");
   const def = STORE_BY_KEY.get(change.store);
   if (!def) throw new BadRequestError(`unknown module ${JSON.stringify(change.store)}`);
-  if (def.kind === "list") await syncList(client, def, change);
-  else if (def.kind === "single") await syncSingle(client, def, change.value);
-  else await syncReplace(client, def, change.value);
+  if (def.kind === "list") return syncList(client, def, change);
+  if (def.kind === "single") return syncSingle(client, def, change.value);
+  return syncReplace(client, def, change.value);
 }
 
-/** Everything the app needs on start-up. Modules never saved are left out. */
-export async function loadAll() {
+const ALL_ACCESS: AccessMap = Object.fromEntries(STORES.map((d) => [d.key, "write"]));
+
+/**
+ * Everything the app needs on start-up, limited to the modules the user may
+ * load. `stores` leaves out modules never saved; `access` says which modules
+ * the user may load ("read") or also save ("write") — others are hidden.
+ */
+export async function loadAll(access: AccessMap = ALL_ACCESS) {
   const meta = await pool.query(`SELECT value FROM app_meta WHERE key = 'initialized'`);
   const state = await pool.query(`SELECT store FROM store_state`);
   const saved = new Set(state.rows.map((r) => r.store as string));
   const stores: Rec = {};
   for (const def of STORES) {
-    if (!saved.has(def.key)) continue;
+    if (!saved.has(def.key) || !access[def.key as StoreKey]) continue;
     if (def.kind === "list") stores[def.key] = await loadList(def);
     else if (def.kind === "single") {
       const { rows } = await pool.query(`SELECT * FROM ${q(def.table)} WHERE "id" = 1`);
@@ -335,15 +377,35 @@ export async function loadAll() {
       stores[def.key] = rows.map((r) => joinRecord(r, def.fields, new Map()));
     }
   }
-  return { initialized: meta.rowCount! > 0, stores };
+  return { initialized: meta.rowCount! > 0, stores, access };
 }
 
-/** Saves a batch of module changes atomically (all or nothing). */
-export async function saveChanges(changes: unknown) {
+function checkWritable(access: AccessMap, store: unknown) {
+  if (typeof store === "string" && STORE_BY_KEY.has(store) && access[store as StoreKey] !== "write") {
+    throw new ForbiddenError(
+      `You don't have permission to change ${STORE_LABELS[store as StoreKey] ?? store}. Nothing was saved.`,
+      "store_forbidden",
+    );
+  }
+}
+
+/**
+ * Saves a batch of module changes atomically (all or nothing). Every module
+ * touched must be writable for the user; the activity log entry is written in
+ * the same transaction.
+ */
+export async function saveChanges(
+  changes: unknown,
+  actor: Actor | null = null,
+  access: AccessMap = ALL_ACCESS,
+) {
   if (!Array.isArray(changes) || !changes.length)
     throw new BadRequestError("changes must be a non-empty list");
+  for (const change of changes) checkWritable(access, isPlainObject(change) ? change.store : undefined);
   await withTransaction(async (client) => {
-    for (const change of changes) await applyChange(client, change as StoreChange);
+    const summaries: ChangeSummary[] = [];
+    for (const change of changes) summaries.push(await applyChange(client, change as StoreChange));
+    await audit(actor, "data.save", summaries.map((s) => s.store).join(", "), { changes: summaries }, client);
   });
 }
 
@@ -352,32 +414,42 @@ export async function saveChanges(changes: unknown) {
  * file). Every module present in `stores` replaces what's in the database;
  * modules not present start from the app's demo data.
  */
-export async function importAll(stores: unknown) {
+export async function importAll(stores: unknown, actor: Actor | null = null) {
   if (!isPlainObject(stores)) throw new BadRequestError("stores must be an object");
   await withTransaction(async (client) => {
+    const imported: ChangeSummary[] = [];
     for (const def of STORES) {
       const value = stores[def.key];
       if (value === undefined || value === null) continue;
       if (def.kind === "list") {
         if (!Array.isArray(value)) throw new BadRequestError(`${def.key}: expected a list`);
-        await syncList(client, def, {
-          store: def.key,
-          replace: true,
-          upserts: value,
-          order: value.map((r) => (r as Rec)?.id),
-        });
-      } else if (def.kind === "single") await syncSingle(client, def, value);
-      else await syncReplace(client, def, value);
+        imported.push(
+          await syncList(client, def, {
+            store: def.key,
+            replace: true,
+            upserts: value,
+            order: value.map((r) => (r as Rec)?.id),
+          }),
+        );
+      } else if (def.kind === "single") imported.push(await syncSingle(client, def, value));
+      else imported.push(await syncReplace(client, def, value));
     }
     await client.query(
       `INSERT INTO app_meta (key, value) VALUES ('initialized', to_jsonb(now()))
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
     );
+    await audit(
+      actor,
+      "data.import",
+      null,
+      { modules: imported.map(({ store, created }) => ({ store, records: created })) },
+      client,
+    );
   });
 }
 
-/** Factory reset: removes every record; the app then starts again from its demo data. */
-export async function resetAll() {
+/** Factory reset: removes every business record; the app then starts again from its demo data. */
+export async function resetAll(actor: Actor | null = null) {
   const tables = [
     "store_state",
     ...STORES.flatMap((def) => [
@@ -385,5 +457,13 @@ export async function resetAll() {
       ...def.fields.flatMap((f) => (isColumn(f) ? [] : [f.child.table])),
     ]),
   ];
-  await pool.query(`TRUNCATE ${tables.map(q).join(", ")} RESTART IDENTITY`);
+  await withTransaction(async (client) => {
+    await client.query(`TRUNCATE ${tables.map(q).join(", ")} RESTART IDENTITY`);
+    await audit(actor, "data.reset", null, {}, client);
+  });
+}
+
+export async function isInitialized() {
+  const { rowCount } = await pool.query(`SELECT 1 FROM app_meta WHERE key = 'initialized'`);
+  return rowCount! > 0;
 }

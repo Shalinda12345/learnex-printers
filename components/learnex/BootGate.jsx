@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LearnexERP } from "@/components/learnex/LearnexERP";
 import { BACKUP_MODULES } from "@/lib/learnex/backup";
 import {
@@ -7,73 +7,28 @@ import {
   readBackupFileStores,
   readBrowserStorageStores,
   readFolderStores,
+  setSignedOutHandler,
 } from "@/lib/learnex/persistence";
+import { getMe, logout } from "@/lib/learnex/auth-client";
+import { ForcedPasswordChangeScreen, LoginScreen, SetupOwnerScreen } from "@/components/learnex/AuthScreens";
+import {
+  GateShell,
+  bodyStyle,
+  buttonStyle,
+  errorStyle,
+  headingStyle,
+  linkStyle,
+  secondaryButtonStyle,
+} from "@/components/learnex/gate";
 
 /* =====================================================================
-   BOOT SEQUENCE — load everything from the database before the app
-   mounts (LearnexERP reads its data on first render). If the database
-   has never been set up, offer a one-time import of existing data.
+   BOOT SEQUENCE
+   1. Who is signed in? (first run: create the owner account)
+   2. Sign in → if on a one-time password, choose a new one
+   3. Load the modules this user may see (LearnexERP reads them on first
+      render). If the database was never set up, someone allowed to
+      restore data can import existing data once.
 ===================================================================== */
-
-// Runs once per page load (React StrictMode mounts effects twice in development).
-let initialLoad = null;
-function loadOnce() {
-  initialLoad ??= loadFromDatabase();
-  return initialLoad;
-}
-
-const shellStyle = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: "100vh",
-  fontFamily: "Inter,system-ui,sans-serif",
-  background: "#0f172a",
-  padding: 24,
-};
-const cardStyle = {
-  maxWidth: 420,
-  width: "100%",
-  background: "#ffffff",
-  borderRadius: 20,
-  padding: 32,
-  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
-};
-const buttonStyle = {
-  width: "100%",
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  fontSize: 14,
-  fontWeight: 600,
-  padding: "12px 16px",
-  borderRadius: 12,
-  cursor: "pointer",
-  marginTop: 8,
-};
-const secondaryButtonStyle = { ...buttonStyle, background: "#eff6ff", color: "#1d4ed8" };
-const linkStyle = {
-  width: "100%",
-  background: "transparent",
-  color: "#64748b",
-  border: "none",
-  fontSize: 13,
-  padding: 10,
-  cursor: "pointer",
-  marginTop: 4,
-  textDecoration: "underline",
-};
-const headingStyle = { margin: "0 0 8px", fontSize: 18, color: "#0f172a" };
-const bodyStyle = { color: "#64748b", fontSize: 13, lineHeight: 1.5, margin: "0 0 16px" };
-const errorStyle = { color: "#dc2626", fontSize: 12, margin: "0 0 12px", whiteSpace: "pre-wrap" };
-
-function GateShell({ children }) {
-  return (
-    <div style={shellStyle}>
-      <div style={cardStyle}>{children}</div>
-    </div>
-  );
-}
 
 function countLabel(key, value) {
   if (key === "settings") return "included";
@@ -82,26 +37,58 @@ function countLabel(key, value) {
 
 export default function BootGate() {
   const [phase, setPhase] = useState({ name: "loading" });
+  const [user, setUser] = useState(null);
   const fileInput = useRef(null);
 
-  useEffect(() => {
-    let active = true;
-    loadOnce().then(
-      ({ initialized }) => active && setPhase({ name: initialized ? "app" : "import" }),
-      (e) => active && setPhase({ name: "offline", error: e.message }),
-    );
-    return () => {
-      active = false;
-    };
+  // Loads the app's data for the signed-in user.
+  const openApp = useCallback(async (me) => {
+    setPhase({ name: "loading" });
+    try {
+      const { initialized } = await loadFromDatabase();
+      if (initialized) setPhase({ name: "app" });
+      else setPhase({ name: me.permissions.includes("data.restore") ? "import" : "notReady" });
+    } catch (e) {
+      if (e.status === 401) setPhase({ name: "login" });
+      else if (e.code === "password_change_required") setPhase({ name: "password" });
+      else setPhase({ name: "offline", error: e.message });
+    }
   }, []);
 
-  function retry() {
-    initialLoad = null;
-    setPhase({ name: "loading" });
-    loadOnce().then(
-      ({ initialized }) => setPhase({ name: initialized ? "app" : "import" }),
-      (e) => setPhase({ name: "offline", error: e.message }),
-    );
+  // Works out the first screen from the session.
+  const start = useCallback(
+    async (notice) => {
+      setPhase({ name: "loading" });
+      try {
+        const me = await getMe();
+        setUser(me.user);
+        if (me.setupRequired) setPhase({ name: "setup", setupAvailable: me.setupAvailable });
+        else if (!me.user) setPhase({ name: "login", notice });
+        else if (me.user.mustChangePassword) setPhase({ name: "password" });
+        else await openApp(me.user);
+      } catch (e) {
+        setPhase({ name: "offline", error: e.message });
+      }
+    },
+    [openApp],
+  );
+
+  useEffect(() => {
+    // Defer the first check so it doesn't run synchronously inside the effect.
+    const t = setTimeout(() => start(), 0);
+    // If the server ends the session mid-use (expired, signed out elsewhere, account disabled).
+    setSignedOutHandler(() => {
+      setUser(null);
+      setPhase({ name: "login", notice: "Your session has ended. Please sign in again." });
+    });
+    return () => clearTimeout(t);
+  }, [start]);
+
+  async function signOut() {
+    try {
+      await logout();
+    } catch {}
+    setUser(null);
+    setPhase({ name: "login" });
   }
 
   function review(source, stores) {
@@ -141,7 +128,16 @@ export default function BootGate() {
     }
   }
 
-  if (phase.name === "app") return <LearnexERP />;
+  if (phase.name === "app" && user) {
+    return <LearnexERP auth={{ user, can: (p) => user.permissions.includes(p), signOut }} />;
+  }
+
+  if (phase.name === "setup")
+    return <SetupOwnerScreen setupAvailable={phase.setupAvailable} onDone={() => start()} />;
+  if (phase.name === "login") return <LoginScreen notice={phase.notice} onDone={() => start()} />;
+  if (phase.name === "password" && user) {
+    return <ForcedPasswordChangeScreen user={user} onDone={() => start()} onSignOut={signOut} />;
+  }
 
   if (phase.name === "offline") {
     return (
@@ -152,8 +148,26 @@ export default function BootGate() {
           DATABASE_URL is correct, then try again.
         </p>
         <p style={errorStyle}>{phase.error}</p>
-        <button style={buttonStyle} onClick={retry}>
+        <button style={buttonStyle} onClick={() => start()}>
           Try Again
+        </button>
+      </GateShell>
+    );
+  }
+
+  if (phase.name === "notReady") {
+    return (
+      <GateShell>
+        <h2 style={headingStyle}>Not set up yet</h2>
+        <p style={bodyStyle}>
+          The business data hasn&apos;t been set up yet. Ask the owner to sign in and finish the setup, then
+          try again.
+        </p>
+        <button style={buttonStyle} onClick={() => start()}>
+          Try Again
+        </button>
+        <button style={linkStyle} onClick={signOut}>
+          Sign out
         </button>
       </GateShell>
     );

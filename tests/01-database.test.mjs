@@ -34,6 +34,12 @@ test("DB-3 every module table, child table and view exists", async () => {
   assert.deepEqual(tables, [
     "app_meta",
     "app_users",
+    "audit_log",
+    "auth_role_permissions",
+    "auth_roles",
+    "auth_sessions",
+    "auth_user_roles",
+    "auth_users",
     "business_settings",
     "cash_accounts",
     "customers",
@@ -59,12 +65,40 @@ test("DB-3 every module table, child table and view exists", async () => {
 test("DB-4 child tables cascade-delete with their parent record", async () => {
   const fks = await rows(`
     SELECT conrelid::regclass::text AS child, confrelid::regclass::text AS parent, confdeltype
-    FROM pg_constraint WHERE contype = 'f' ORDER BY 1`);
+    FROM pg_constraint WHERE contype = 'f' AND conrelid::regclass::text NOT LIKE 'auth\_%' AND conrelid::regclass::text <> 'audit_log' ORDER BY 1`);
   fks.forEach((f) =>
     log(`${f.child} -> ${f.parent} (on delete ${f.confdeltype === "c" ? "cascade" : f.confdeltype})`),
   );
   assert.equal(fks.length, 5);
   assert.ok(fks.every((f) => f.confdeltype === "c"));
+});
+
+const ON_DELETE = { a: "no action", r: "restrict", c: "cascade", n: "set null", d: "set default" };
+test("DB-9 account tables are linked safely (sessions/roles go with the user, roles in use can't vanish, the log keeps history)", async () => {
+  const fks = await rows(`
+    SELECT conrelid::regclass::text AS child, a.attname AS col, confrelid::regclass::text AS parent, confdeltype
+    FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+    WHERE contype = 'f' AND (conrelid::regclass::text LIKE 'auth\_%' OR conrelid::regclass::text = 'audit_log')
+    ORDER BY 1, 2`);
+  const got = Object.fromEntries(fks.map((f) => [`${f.child}.${f.col}`, ON_DELETE[f.confdeltype]]));
+  Object.entries(got).forEach(([k, v]) => log(`${k} -> on delete ${v}`));
+  assert.deepEqual(got, {
+    "audit_log.user_id": "set null",
+    "auth_role_permissions.role_id": "cascade",
+    "auth_sessions.user_id": "cascade",
+    "auth_user_roles.granted_by": "set null",
+    "auth_user_roles.role_id": "restrict",
+    "auth_user_roles.user_id": "cascade",
+    "auth_users.created_by": "set null",
+  });
+});
+
+test("DB-10 usernames and emails are unique regardless of upper/lower case", async () => {
+  const idx = await rows(
+    `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'auth_users' AND indexdef LIKE '%UNIQUE%lower%'`,
+  );
+  idx.forEach((i) => log(i.indexdef));
+  assert.equal(idx.length, 2);
 });
 
 test("DB-5 the app logs in with its own non-superuser role that owns the tables", async () => {
@@ -85,7 +119,7 @@ test("DB-6 the migration is recorded in schema_migrations", async () => {
   applied.forEach((m) => log(m.name, "applied", m.applied_at.toISOString()));
   assert.deepEqual(
     applied.map((m) => m.name),
-    ["001_learnex_schema.sql"],
+    ["001_learnex_schema.sql", "002_auth.sql"],
   );
 });
 
