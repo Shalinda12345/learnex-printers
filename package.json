@@ -8,11 +8,12 @@
     "start": "next start",
     "lint": "eslint",
     "db:setup": "node --env-file=.env scripts/db-setup.mjs",
-    "test:db": "next build && node --env-file=.env scripts/test-db.mjs"
+    "test:db": "next build && node --env-file=.env scripts/test-db.mjs",
+    "test:unit": "node --import ./tests/unit/register.mjs --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"tests/unit/*.test.mjs\""
   },
   "dependencies": {
+    "mysql2": "^3.24.4",
     "next": "16.2.10",
-    "pg": "^8.13.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1"
@@ -20,7 +21,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/pg": "^8.11.10",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

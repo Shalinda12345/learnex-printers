@@ -49,11 +49,11 @@ function assertNoConsoleProblems(page) {
 
 async function moduleCounts() {
   return one(`SELECT
-    (SELECT count(*) FROM products)::int AS products, (SELECT count(*) FROM customers)::int AS customers,
-    (SELECT count(*) FROM suppliers)::int AS suppliers, (SELECT count(*) FROM sales_orders)::int AS sales_orders,
-    (SELECT count(*) FROM raw_materials)::int AS raw_materials, (SELECT count(*) FROM ledger_entries)::int AS ledger,
-    (SELECT count(*) FROM cash_accounts)::int AS cash_accounts, (SELECT count(*) FROM app_users)::int AS users,
-    (SELECT count(*) FROM business_settings)::int AS settings, (SELECT count(*) FROM store_state)::int AS modules_saved`);
+    (SELECT count(*) FROM products) AS products, (SELECT count(*) FROM customers) AS customers,
+    (SELECT count(*) FROM suppliers) AS suppliers, (SELECT count(*) FROM sales_orders) AS sales_orders,
+    (SELECT count(*) FROM raw_materials) AS raw_materials, (SELECT count(*) FROM ledger_entries) AS ledger,
+    (SELECT count(*) FROM cash_accounts) AS cash_accounts, (SELECT count(*) FROM app_users) AS users,
+    (SELECT count(*) FROM business_settings) AS settings, (SELECT count(*) FROM store_state) AS modules_saved`);
 }
 const DEMO = {
   products: 14,
@@ -113,19 +113,19 @@ describe("first start and everyday use", () => {
     await waitSaved(page);
     const invoice = toast.match(/INV-\d+/)[0];
     const order = await one(
-      `SELECT id, invoice, amount, payment, channel, position FROM sales_orders WHERE invoice = $1`,
+      `SELECT id, invoice, amount, payment, channel, position FROM sales_orders WHERE invoice = ?`,
       [invoice],
     );
     const lines = await rows(
-      `SELECT product_id, name, qty, price FROM sales_order_items WHERE order_id = $1`,
+      `SELECT product_id, name, qty, price FROM sales_order_items WHERE order_id = ?`,
       [order.id],
     );
-    const pays = await rows(`SELECT date, amount FROM sales_order_payments WHERE order_id = $1`, [order.id]);
+    const pays = await rows(`SELECT date, amount FROM sales_order_payments WHERE order_id = ?`, [order.id]);
     const stockAfter = Number(
       (await one(`SELECT stock FROM products WHERE name = 'HP 12A Toner Cartridge'`)).stock,
     );
     const newLedger = await rows(
-      `SELECT id, description, type, amount, kind FROM ledger_entries ORDER BY position LIMIT $1`,
+      `SELECT id, description, type, amount, kind FROM ledger_entries ORDER BY position LIMIT ?`,
       [(await count("ledger_entries")) - ledgerBefore],
     );
     log("toast:", toast);
@@ -240,7 +240,7 @@ describe("first start and everyday use", () => {
     assertNoConsoleProblems(page);
   });
 
-  test("UI-8 after wiping browser storage and reloading, everything comes back from PostgreSQL", async () => {
+  test("UI-8 after wiping browser storage and reloading, everything comes back from MySQL", async () => {
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
@@ -343,7 +343,7 @@ describe("when the database can't be reached", () => {
     await page.context().close();
   });
 
-  test("UI-14 with PostgreSQL actually unreachable, the error screen shows the real cause", async () => {
+  test("UI-14 with MySQL actually unreachable, the error screen shows the real cause", async () => {
     const page = await newPage(browser, { base: DEAD_DB_BASE });
     await page.goto("/");
     await page.getByText("Can't reach the database").waitFor();

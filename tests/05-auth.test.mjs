@@ -87,7 +87,7 @@ describe("first run: creating the owner account", () => {
     assert.equal(weak.status, 400);
     assert.equal(same.status, 400);
     assert.match(same.body.error, /same as the username/);
-    assert.equal((await one(`SELECT count(*)::int n FROM auth_users`)).n, 0);
+    assert.equal((await one(`SELECT count(*) AS n FROM auth_users`)).n, 0);
   });
 
   test("AUTH-4 the right setup code creates the owner, the default roles, and signs in with a safe cookie", async () => {
@@ -95,7 +95,7 @@ describe("first run: creating the owner account", () => {
     const r = await owner.post("/api/auth/register", { ...OWNER, setupCode: SETUP_CODE });
     const cookie = r.setCookie.find((c) => c.includes("learnex_session"));
     const me = await owner.get("/api/auth/me");
-    const roles = await rows(`SELECT key, name, is_system FROM auth_roles ORDER BY id`);
+    const roles = await rows("SELECT `key`, name, is_system FROM auth_roles ORDER BY id");
     log("Set-Cookie:", cookie.replace(/=[^;]+/, "=<token>"));
     log(
       "signed in as:",
@@ -135,7 +135,7 @@ describe("first run: creating the owner account", () => {
   test("AUTH-6 passwords are stored as scrypt hashes and session tokens only as SHA-256", async () => {
     const owner = await new Client().login(OWNER.username, OWNER.password);
     const token = owner.cookie.split("=")[1];
-    const u = await one(`SELECT password_hash FROM auth_users WHERE username = $1`, [OWNER.username]);
+    const u = await one(`SELECT password_hash FROM auth_users WHERE username = ?`, [OWNER.username]);
     const s = await rows(`SELECT id FROM auth_sessions`);
     log("stored password:", u.password_hash.split("$").slice(0, 4).join("$") + "$<salt>$<hash>");
     log(
@@ -145,6 +145,25 @@ describe("first run: creating the owner account", () => {
     assert.ok(!u.password_hash.includes(OWNER.password));
     assert.ok(!s.some((x) => x.id === token));
     assert.ok(s.some((x) => x.id === sha256(token)));
+  });
+
+  test("AUTH-40 two first-run registrations at the same moment create only one owner", async () => {
+    await resetAuth();
+    const [a, b] = await Promise.all([
+      new Client().post("/api/auth/register", { ...OWNER, setupCode: SETUP_CODE }),
+      new Client().post("/api/auth/register", {
+        ...OWNER,
+        username: "owner2",
+        email: "owner2@learnex.test",
+        setupCode: SETUP_CODE,
+      }),
+    ]);
+    const accounts = await rows(`SELECT username FROM auth_users`);
+    log(
+      `registrations -> ${a.status} / ${b.status}; accounts created: ${accounts.map((u) => u.username).join(", ")}`,
+    );
+    assert.deepEqual([a.status, b.status].sort(), [200, 403]);
+    assert.equal(accounts.length, 1);
   });
 });
 
@@ -191,7 +210,7 @@ describe("signing in", () => {
       password: STAFF_PASSWORD,
     });
     const u = await one(
-      `SELECT failed_login_count, locked_until > now() AS locked FROM auth_users WHERE username = 'lockme'`,
+      `SELECT failed_login_count, locked_until > NOW(6) AS locked FROM auth_users WHERE username = 'lockme'`,
     );
     log(
       `5 wrong attempts -> ${statuses.join(", ")}; then correct password -> ${right.status} "${right.body.error}"`,
@@ -199,7 +218,7 @@ describe("signing in", () => {
     log(`DB: failed_login_count=${u.failed_login_count}, locked=${u.locked}`);
     assert.deepEqual(statuses, [401, 401, 401, 401, 401]);
     assert.equal(right.status, 429);
-    assert.equal(u.locked, true);
+    assert.equal(u.locked, 1);
   });
 
   test("AUTH-10 an administrator's password reset unlocks the account and issues a one-time password", async () => {
@@ -209,7 +228,7 @@ describe("signing in", () => {
       username: "lockme",
       password: r.body.temporaryPassword,
     });
-    const u = await one(`SELECT must_change_password, locked_until FROM auth_users WHERE id = $1`, [id]);
+    const u = await one(`SELECT must_change_password, locked_until FROM auth_users WHERE id = ?`, [id]);
     log(
       `reset -> ${r.status}, one-time password format: ${r.body.temporaryPassword.replace(/[A-Za-z0-9]/g, "x")}; sign-in with it -> ${login.status}; must change: ${u.must_change_password}`,
     );
@@ -233,9 +252,9 @@ describe("signing in", () => {
   test("AUTH-12 an idle session expires (12h) and is deleted", async () => {
     const c = await new Client().login(OWNER.username, OWNER.password);
     const id = sha256(c.cookie.split("=")[1]);
-    await pool.query(`UPDATE auth_sessions SET expires_at = now() - interval '1 second' WHERE id = $1`, [id]);
+    await pool.query(`UPDATE auth_sessions SET expires_at = NOW(6) - INTERVAL 1 SECOND WHERE id = ?`, [id]);
     const r = await c.get("/api/learnex/data");
-    const left = await one(`SELECT count(*)::int n FROM auth_sessions WHERE id = $1`, [id]);
+    const left = await one(`SELECT count(*) AS n FROM auth_sessions WHERE id = ?`, [id]);
     log(`idle-expired session -> ${r.status}; row left in DB: ${left.n}`);
     assert.equal(r.status, 401);
     assert.equal(left.n, 0);
@@ -245,7 +264,7 @@ describe("signing in", () => {
     const c = await new Client().login(OWNER.username, OWNER.password);
     const id = sha256(c.cookie.split("=")[1]);
     await pool.query(
-      `UPDATE auth_sessions SET absolute_expires_at = now() - interval '1 second' WHERE id = $1`,
+      `UPDATE auth_sessions SET absolute_expires_at = NOW(6) - INTERVAL 1 SECOND WHERE id = ?`,
       [id],
     );
     const r = await c.get("/api/learnex/data");
@@ -257,19 +276,19 @@ describe("signing in", () => {
     const c = await new Client().login(OWNER.username, OWNER.password);
     const id = sha256(c.cookie.split("=")[1]);
     await pool.query(
-      `UPDATE auth_sessions SET last_seen_at = now() - interval '2 hours', expires_at = now() + interval '10 hours' WHERE id = $1`,
+      `UPDATE auth_sessions SET last_seen_at = NOW(6) - INTERVAL 2 HOUR, expires_at = NOW(6) + INTERVAL 10 HOUR WHERE id = ?`,
       [id],
     );
     await c.get("/api/auth/me");
     const s = await one(
-      `SELECT extract(epoch FROM expires_at - now())/3600 AS hours_left, expires_at <= absolute_expires_at AS within FROM auth_sessions WHERE id = $1`,
+      `SELECT TIMESTAMPDIFF(MICROSECOND, NOW(6), expires_at) / 3600e6 AS hours_left, expires_at <= absolute_expires_at AS within FROM auth_sessions WHERE id = ?`,
       [id],
     );
     log(
       `idle expiry after use: ${Number(s.hours_left).toFixed(2)} hours left (was 10); within absolute limit: ${s.within}`,
     );
     assert.ok(Number(s.hours_left) > 11.9);
-    assert.equal(s.within, true);
+    assert.equal(s.within, 1);
   });
 });
 
@@ -444,7 +463,7 @@ describe("what each role can load and save", () => {
         },
       ],
     });
-    const cust = await one(`SELECT name FROM customers WHERE id = $1`, [all.customers[0].id]);
+    const cust = await one(`SELECT name FROM customers WHERE id = ?`, [all.customers[0].id]);
     log(`-> ${r.status} "${r.body.error}"; customer name still "${cust.name}"`);
     assert.equal(r.status, 403);
     assert.equal(cust.name, all.customers[0].name);
@@ -538,7 +557,7 @@ describe("no one can give themselves (or others) more power", () => {
       roleIds: [ids.administrator, ids.accountant],
     });
     const disable = await admin.patch(`/api/user/${adminId}`, { status: "disabled" });
-    const ownerId = (await one(`SELECT id FROM auth_users WHERE username = $1`, [OWNER.username])).id;
+    const ownerId = (await one(`SELECT id FROM auth_users WHERE username = ?`, [OWNER.username])).id;
     const ownerSelf = await owner.put(`/api/user/${ownerId}/role`, { roleIds: [ids.administrator] });
     log(
       `admin changes own roles -> ${roles.status}; admin disables self -> ${disable.status}; owner drops own owner role -> ${ownerSelf.status}`,
@@ -549,7 +568,7 @@ describe("no one can give themselves (or others) more power", () => {
   });
 
   test("AUTH-32 only an owner can touch an owner's account", async () => {
-    const ownerId = (await one(`SELECT id FROM auth_users WHERE username = $1`, [OWNER.username])).id;
+    const ownerId = (await one(`SELECT id FROM auth_users WHERE username = ?`, [OWNER.username])).id;
     const reset = await admin.post(`/api/user/${ownerId}/password`);
     const disable = await admin.patch(`/api/user/${ownerId}`, { status: "disabled" });
     const signOut = await admin.delete(`/api/user/${ownerId}/sessions`);
@@ -633,9 +652,7 @@ describe("changes take effect immediately", () => {
       username: "temp",
       password: STAFF_PASSWORD,
     });
-    const sessions = await one(`SELECT count(*)::int n FROM auth_sessions WHERE user_id = $1`, [
-      cashier.userId,
-    ]);
+    const sessions = await one(`SELECT count(*) AS n FROM auth_sessions WHERE user_id = ?`, [cashier.userId]);
     log(
       `disable -> ${r.status}; existing session -> ${existing.status}; new sign-in -> ${relogin.status} "${relogin.body.error}"; sessions left: ${sessions.n}`,
     );
@@ -822,13 +839,15 @@ describe("in the browser", () => {
     const toast = await page.getByText(/Sale completed/).innerText();
     await waitSaved(page);
     const invoice = toast.match(/INV-\d+/)[0];
-    const order = await one(`SELECT id FROM sales_orders WHERE invoice = $1`, [invoice]);
+    const order = await one(`SELECT id FROM sales_orders WHERE invoice = ?`, [invoice]);
     const entry = await one(
       `SELECT username, details FROM audit_log WHERE action = 'data.save' ORDER BY id DESC LIMIT 1`,
     );
     log(`${toast}`);
     log(
-      `order ${order.id} in DB; activity log: ${entry.username} saved ${entry.details.changes.map((c) => c.store).join(", ")}`,
+      `order ${order.id} in DB; activity log: ${entry.username} saved ${JSON.parse(entry.details)
+        .changes.map((c) => c.store)
+        .join(", ")}`,
     );
     assert.equal(entry.username, created.username);
     assert.deepEqual(takeConsoleProblems(page), []);

@@ -263,7 +263,7 @@ export function SettingsPage({
           <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm space-y-4`}>
             <h3 className="font-semibold mb-1">{"Data & Backup"}</h3>
             <p className={`text-sm ${subText}`}>
-              Your data is stored in the PostgreSQL database on the server running this app, not in this
+              Your data is stored in the MySQL database on the server running this app, not in this
               browser. Changes are saved automatically as you work; the status badge in the top bar shows
               whether your latest changes have been saved.
             </p>
@@ -272,8 +272,8 @@ export function SettingsPage({
             <h3 className="font-semibold mb-1">Database</h3>
             <p className={`text-sm ${subText}`}>
               Every module — products, orders, purchases, deliveries, customers, suppliers, the ledger, cash
-              accounts, settings and users — is kept in its own table in PostgreSQL. Back the database up
-              regularly (for example with pg_dump), and download a backup file below as an extra copy.
+              accounts, settings and users — is kept in its own table in MySQL. Back the database up
+              regularly (for example with mysqldump), and download a backup file below as an extra copy.
             </p>
           </div>
           {auth.can("data.backup") && (
