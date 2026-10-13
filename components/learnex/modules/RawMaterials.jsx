@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Field, Modal, inputCls } from "@/components/learnex/ui";
 import { MinusCircle, Pencil, Plus, Save, Search, Trash2 } from "@/components/learnex/icons";
 import { RAW_MATERIAL_CATEGORIES } from "@/lib/learnex/seed";
-import { fmtDate, money, nextNumId, numVal, round2, todayISO } from "@/lib/learnex/utils";
+import { fmtDate, money, nextNumId, numVal, round2, round6, todayISO } from "@/lib/learnex/utils";
 import { nextSeq } from "@/lib/learnex/persistence";
 
 /* =====================================================================
@@ -35,7 +35,8 @@ export function RawMaterialModal({ onClose, onSave, initial, dark, cardBg, subTe
       ...form,
       purchaseQty,
       availableQty: form.availableQty === "" ? purchaseQty : numVal(form.availableQty, purchaseQty),
-      costPrice: round2(form.costPrice),
+      // Average costs are held to six decimals (see round6 in utils).
+      costPrice: round6(form.costPrice),
     });
   }
   return (
@@ -392,8 +393,7 @@ export function RawMaterials({
               </tr>
             </thead>
             <tbody>
-              {filtered.map(
-                (m) => (
+              {filtered.map((m) => (
                   <tr
                     key={m.id}
                     className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors`}
@@ -437,14 +437,13 @@ export function RawMaterials({
                       </div>
                     </td>
                   </tr>
-                ),
-                filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
-                      No raw materials yet. Add one, or record a Purchase Order to bring materials in.
-                    </td>
-                  </tr>
-                ),
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
+                    No raw materials yet. Add one, or record a Purchase Order to bring materials in.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

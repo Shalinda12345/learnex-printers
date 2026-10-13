@@ -188,6 +188,19 @@ function importFixture() {
     unit: "pc",
     extraFlag: true,
   });
+  // Values MySQL's columns can't hold exactly; they must come back unchanged.
+  data.products.push({
+    id: 1760000000000998,
+    name: "Long " + "x".repeat(300_000), // longer than a TEXT column (64 KB)
+    sku: "LIMITS",
+    category: "Accessories",
+    price: 1.5e-31, // more decimal places than DECIMAL(65,30): MySQL would store 0
+    cost: 1e35, // more digits than DECIMAL(65,30)
+    stock: 1,
+    min: 0,
+    unit: "pc",
+  });
+  data.suppliers[0] = { ...data.suppliers[0], lastOrder: "0999-12-31" }; // before MySQL's DATE range
   return data;
 }
 
@@ -300,6 +313,26 @@ describe("import → reload round trip (real backup + edge cases)", () => {
     assert.equal(odd.sku, 12345);
     assert.equal(odd.price, "12");
   });
+  test("API-32 values MySQL can't hold exactly are kept as given (1.5e-31, 1e35, 300 KB text, year 999)", async () => {
+    const p = loaded.stores.products.find((x) => x.id === 1760000000000998);
+    const lastOrder = loaded.stores.suppliers[0].lastOrder;
+    const row = await one(
+      `SELECT price, cost, name, JSON_LENGTH(extra) AS extras FROM products WHERE id = 1760000000000998`,
+    );
+    log(
+      `price = ${p.price}, cost = ${p.cost}, name = ${p.name.length} chars, supplier lastOrder = ${lastOrder}`,
+      `| row: price=${row.price}, cost=${row.cost}, name=${row.name}, ${row.extras} value(s) in extra`,
+    );
+    assert.equal(p.price, 1.5e-31);
+    assert.equal(p.cost, 1e35);
+    assert.equal(p.name.length, 300_005);
+    assert.equal(lastOrder, "0999-12-31");
+    assert.deepEqual(
+      [row.price, row.cost, row.name],
+      [null, null, null],
+      "kept in extra, not cut to fit a column",
+    );
+  });
   test("API-13 fields the schema doesn't know are kept (custom fields, nested objects)", () => {
     const odd = loaded.stores.products.find((p) => p.id === 1760000000000999);
     const li = loaded.stores.salesOrders.find((x) => x.id === "SO-T2").lineItems[0];
@@ -350,7 +383,11 @@ describe("import → reload round trip (real backup + edge cases)", () => {
     assert.equal(Number(p.price), 42500);
     assert.equal(Number(items[0].qty), 2);
     assert.equal(pays[0].date, "2026-10-13");
-    assert.deepEqual(pays[1].extra, { date: "", amount: "5" }, "values that don't fit a column go to extra");
+    assert.deepEqual(
+      JSON.parse(pays[1].extra),
+      { date: "", amount: "5" },
+      "values that don't fit a column go to extra",
+    );
     assert.equal(bill.shop, "Shop A");
     assert.equal(led.description, "Receipt");
   });
@@ -430,7 +467,7 @@ describe("saving changes (/sync)", () => {
 
   test("API-20 deleting an order also deletes its line items and payments", async () => {
     const orders = (await api("/data")).body.stores.salesOrders;
-    const itemsBefore = await rows(`SELECT count(*)::int n FROM sales_order_items WHERE order_id = 'SO-T2'`);
+    const itemsBefore = await rows(`SELECT count(*) n FROM sales_order_items WHERE order_id = 'SO-T2'`);
     const r = await api("/sync", {
       changes: [
         {
@@ -442,7 +479,7 @@ describe("saving changes (/sync)", () => {
     });
     assert.equal(r.status, 200);
     const items = await one(
-      `SELECT (SELECT count(*) FROM sales_order_items WHERE order_id = 'SO-T2')::int i, (SELECT count(*) FROM sales_order_payments WHERE order_id = 'SO-T2')::int p`,
+      `SELECT (SELECT count(*) FROM sales_order_items WHERE order_id = 'SO-T2') i, (SELECT count(*) FROM sales_order_payments WHERE order_id = 'SO-T2') p`,
     );
     log(`SO-T2 line items before: ${itemsBefore[0].n}; after delete: items=${items.i}, payments=${items.p}`);
     assert.deepEqual(items, { i: 0, p: 0 });
@@ -460,7 +497,7 @@ describe("saving changes (/sync)", () => {
         { store: "products", upserts: [{ id: "not-a-number" }], order: ["not-a-number"] },
       ],
     });
-    const name = (await one(`SELECT name FROM customers WHERE id = $1`, [before.customers[0].id])).name;
+    const name = (await one(`SELECT name FROM customers WHERE id = ?`, [before.customers[0].id])).name;
     log(`-> ${r.status} ${r.body.error}; customer name in DB is still "${name}"`);
     assert.equal(r.status, 400);
     assert.equal(name, before.customers[0].name);
@@ -482,6 +519,33 @@ describe("saving changes (/sync)", () => {
     assert.deepEqual(norm(s.settings), norm(settings));
     assert.equal(await count("app_users"), 1);
   });
+
+  test("API-35 long lists are saved, reordered and deleted in batches (2,500 ledger entries)", async () => {
+    const many = Array.from({ length: 2500 }, (_, i) => ({
+      id: `TXN-B${i}`,
+      date: "2026-10-13",
+      desc: `Bulk entry ${i}`,
+      type: "Expense",
+      category: "Test",
+      amount: i + 0.5,
+      account: "CASH-MAIN",
+      kind: "opex",
+      cash: true,
+    }));
+    const save = (change) => api("/sync", { changes: [{ store: "ledger", ...change }] });
+    const saved = await save({ replace: true, upserts: many, order: many.map((t) => t.id) });
+    const reversed = many.map((t) => t.id).reverse();
+    const reordered = await save({ upserts: [], deletes: [], order: reversed });
+    const afterReorder = (await api("/data")).body.stores.ledger.map((t) => t.id);
+    const deleted = await save({ deletes: reversed.slice(0, 1500), order: reversed.slice(1500) });
+    const afterDelete = (await api("/data")).body.stores.ledger;
+    log(
+      `save ${many.length} -> ${saved.status}; reverse the order -> ${reordered.status}; delete 1,500 -> ${deleted.status}, ${afterDelete.length} left`,
+    );
+    assert.deepEqual([saved.status, reordered.status, deleted.status], [200, 200, 200]);
+    assert.deepEqual(afterReorder, reversed);
+    assert.deepEqual(norm(afterDelete), norm([...many].reverse().slice(1500)));
+  });
 });
 
 describe("bad requests are refused without changing anything", () => {
@@ -498,6 +562,16 @@ describe("bad requests are refused without changing anything", () => {
     [
       "API-24 wrong id type for the module",
       { changes: [{ store: "customers", upserts: [{ id: "abc" }], order: ["abc"] }] },
+      /invalid id/,
+    ],
+    [
+      "API-33 a text id ending in a space (MySQL would treat it as the same id without the space)",
+      { changes: [{ store: "ledger", upserts: [{ id: "TXN-X " }], order: ["TXN-X "] }] },
+      /invalid id/,
+    ],
+    [
+      "API-34 a text id longer than the id column (191 characters)",
+      { changes: [{ store: "ledger", upserts: [{ id: "T".repeat(192) }], order: ["T".repeat(192)] }] },
       /invalid id/,
     ],
     [

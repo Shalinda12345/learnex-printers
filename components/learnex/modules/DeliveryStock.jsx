@@ -960,8 +960,9 @@ export function DeliveryStock({
           // stock was taken out and never returned — give it back
           return { ...p, stock: p.stock + li.taken };
         }
-        // completed: the returned portion was already added back — remove it again
-        return { ...p, stock: Math.max(0, p.stock - (li.returned || 0)) };
+        // completed: the returned portion is already back on the shelf; the sold
+        // portion comes back too, because its sale is removed along with the run
+        return { ...p, stock: p.stock + Math.max(0, li.taken - (li.returned || 0)) };
       }),
     );
     if (run.ledgerTxnId) {
@@ -1093,8 +1094,7 @@ export function DeliveryStock({
               </tr>
             </thead>
             <tbody>
-              {filtered.map(
-                (r) => (
+              {filtered.map((r) => (
                   <tr
                     key={r.id}
                     className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
@@ -1160,14 +1160,13 @@ export function DeliveryStock({
                       </div>
                     </td>
                   </tr>
-                ),
-                filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
-                      No delivery runs yet. Start one to record the stock taken out for today&apos;s delivery.
-                    </td>
-                  </tr>
-                ),
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
+                    No delivery runs yet. Start one to record the stock taken out for today&apos;s delivery.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

@@ -1,7 +1,8 @@
 // Runs the database test suite (tests/*.test.mjs) against a separate
-// "<db>_test" database, so the real data is never touched.
+// "<db>_test" database (or TEST_DATABASE_URL), so the real data is never touched.
 //
-//   npm run test:db        (builds first; needs PostgreSQL running and Chrome installed)
+//   npm run test:db        (builds first; needs MySQL running and Chrome installed)
+//   npm run test:db -- 06-sales 07-stock      (only these test files)
 //
 // Starts two servers from the production build:
 //   :3311  wired to the test database
@@ -11,8 +12,15 @@ import { createWriteStream, mkdirSync } from "node:fs";
 import path from "node:path";
 
 const root = path.join(import.meta.dirname, "..");
-const testUrl = new URL(process.env.DATABASE_URL);
-testUrl.pathname = testUrl.pathname.replace(/\/?$/, "") + "_test";
+// TEST_DATABASE_URL (e.g. in .env) keeps the tests on a local server while the
+// app itself uses a hosted database; by default it is DATABASE_URL + "_test".
+const testUrl = new URL(process.env.TEST_DATABASE_URL || process.env.DATABASE_URL);
+if (!process.env.TEST_DATABASE_URL) testUrl.pathname = testUrl.pathname.replace(/\/?$/, "") + "_test";
+if (!testUrl.pathname.endsWith("_test")) {
+  throw new Error(
+    `The test database's name must end in "_test" (the tests wipe it): ${testUrl.pathname.slice(1)}`,
+  );
+}
 const TEST_DATABASE_URL = testUrl.toString();
 const deadUrl = new URL(TEST_DATABASE_URL);
 deadUrl.port = "1";
@@ -68,7 +76,19 @@ try {
   mkdirSync(path.join(root, "test-results"), { recursive: true });
   const logPath = path.join(root, "test-results", "db-tests.log");
   const log = createWriteStream(logPath);
-  const files = ["01-database", "02-api", "03-ui", "05-auth", "04-limitations"].map((f) => `tests/${f}.test.mjs`);
+  const all = [
+    "01-database",
+    "02-api",
+    "03-ui",
+    "05-auth",
+    "06-sales",
+    "07-stock",
+    "08-finance",
+    "09-admin",
+    "04-limitations",
+  ];
+  const only = process.argv.slice(2);
+  const files = (only.length ? only : all).map((f) => `tests/${f}.test.mjs`);
   const run = spawn(process.execPath, ["--test", "--test-concurrency=1", "--test-reporter=spec", ...files], {
     cwd: root,
     env,
