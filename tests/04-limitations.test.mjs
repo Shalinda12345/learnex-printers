@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import {
+  asOwner,
   api,
   count,
   launchBrowser,
@@ -20,6 +21,7 @@ import {
 
 let browser;
 before(async () => {
+  await asOwner();
   browser = await launchBrowser();
 });
 after(async () => {
@@ -27,17 +29,8 @@ after(async () => {
   await pool.end();
 });
 
-test("LIMIT-1 [known] the data API needs no login — any client that can reach the server can read it", async () => {
-  const r = await fetch(process.env.TEST_BASE_URL + "/api/learnex/data", { credentials: "omit" });
-  const body = await r.json();
-  log(
-    `GET /api/learnex/data with no credentials -> ${r.status}, modules returned: ${Object.keys(body.stores).length}`,
-  );
-  assert.equal(r.status, 200);
-});
-
 test(
-  "LIMIT-2 [known] `next start` listens on all network interfaces, not only this PC",
+  "LIMIT-2 [known] the app is served over plain HTTP on every network interface, so passwords cross the network unencrypted from other PCs",
   { skip: process.platform !== "win32" && "uses Windows netstat" },
   () => {
     const port = process.env.TEST_APP_PORT;

@@ -14,6 +14,12 @@ export function SaveStatusBadge() {
     label = "Saving…";
     dot = "bg-amber-500";
     title = "Saving your latest changes to the database…";
+  } else if (status === "denied") {
+    label = "Not allowed";
+    dot = "bg-red-500";
+    title =
+      (error || "You don't have permission to make that change.") +
+      "\n\nReload the page to see what is saved.";
   } else if (status === "error") {
     label = "Not saved";
     dot = "bg-red-500";
@@ -33,7 +39,11 @@ export function SaveStatusBadge() {
       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
       <span
         className={
-          status === "error" ? "text-red-600" : status === "saving" ? "text-amber-600" : "text-emerald-600"
+          status === "error" || status === "denied"
+            ? "text-red-600"
+            : status === "saving"
+              ? "text-amber-600"
+              : "text-emerald-600"
         }
       >
         {label}
