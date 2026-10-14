@@ -91,7 +91,7 @@ export function LearnexERP({ auth }) {
     if (!canWrite("cashAccounts")) return;
     const missing = SEED_CASH_ACCOUNTS.filter((s) => !(cashAccounts || []).some((a) => a.id === s.id));
     if (missing.length) setCashAccounts((prev) => [...missing, ...(prev || [])]);
-  }, [cashAccounts]);
+  }, [cashAccounts, setCashAccounts]);
   // Raw materials are always bought with ordinary cash, so the separate
   // purchase account has been retired. Any movement that was posted to it is
   // moved onto the Cash Account. Amounts, dates and descriptions are all kept
@@ -101,7 +101,7 @@ export function LearnexERP({ auth }) {
     if (!canWrite("cashAccounts")) return;
     if ((cashAccounts || []).some((a) => a.id === LEGACY_PURCHASES_CASH_ID))
       setCashAccounts((prev) => (prev || []).filter((a) => a.id !== LEGACY_PURCHASES_CASH_ID));
-  }, [cashAccounts]);
+  }, [cashAccounts, setCashAccounts]);
   useEffect(() => {
     if (!canWrite("ledger")) return;
     if ((ledger || []).some((t) => t.account === LEGACY_PURCHASES_CASH_ID))
@@ -110,7 +110,7 @@ export function LearnexERP({ auth }) {
           t.account === LEGACY_PURCHASES_CASH_ID ? { ...t, account: MAIN_CASH_ID } : t,
         ),
       );
-  }, [ledger]);
+  }, [ledger, setLedger]);
   useEffect(() => {
     if (!canWrite("purchaseOrders")) return;
     if ((purchaseOrders || []).some((o) => o.cashAccount === LEGACY_PURCHASES_CASH_ID))
@@ -119,7 +119,7 @@ export function LearnexERP({ auth }) {
           o.cashAccount === LEGACY_PURCHASES_CASH_ID ? { ...o, cashAccount: MAIN_CASH_ID } : o,
         ),
       );
-  }, [purchaseOrders]);
+  }, [purchaseOrders, setPurchaseOrders]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3000);

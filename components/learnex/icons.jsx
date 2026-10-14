@@ -1,7 +1,6 @@
 /* =====================================================================
    Self-contained icon system (replaces lucide-react) — plain inline SVGs,
-   zero external dependency, so this page works completely offline once
-   loaded (only React/ReactDOM/Babel/Tailwind come from the internet).
+   no icon library needed.
 ===================================================================== */
 export const ICONS = {
   "arrow-down-right": '<line x1="7" y1="7" x2="17" y2="17"/><polyline points="17 7 17 17 7 17"/>',

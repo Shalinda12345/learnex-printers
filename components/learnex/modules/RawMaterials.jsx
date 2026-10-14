@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Field, Modal, inputCls } from "@/components/learnex/ui";
+import { Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import { MinusCircle, Pencil, Plus, Save, Search, Trash2 } from "@/components/learnex/icons";
 import { RAW_MATERIAL_CATEGORIES } from "@/lib/learnex/seed";
-import { fmtDate, money, nextNumId, numVal, round2, round6, todayISO } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
+import { fmtDate, money, nextNumId, nextSeqId, numVal, round2, round6, todayISO } from "@/lib/learnex/utils";
 
 /* =====================================================================
    RAW MATERIALS — a module fully separate from finished-goods Inventory.
@@ -175,7 +174,6 @@ export function RawMaterials({
   setRawMaterialUsage,
   suppliers,
   currentUser,
-  ledger,
   setLedger,
 }) {
   const [query, setQuery] = useState("");
@@ -261,7 +259,7 @@ export function RawMaterials({
         : `Usage record removed. The original material no longer exists, so no stock was returned.`,
     );
   }
-  async function saveDailyUsage(e) {
+  function saveDailyUsage(e) {
     e.preventDefault();
     const material = rawMaterials.find((m) => m.id === Number(entryMaterialId));
     const qty = Number(entryQty) || 0;
@@ -288,7 +286,7 @@ export function RawMaterials({
     // Like a real ERP, the material cost reaches profit in one place only:
     // Cost of Goods Sold, at the moment the finished goods are actually sold.
     const consumedValue = round2(numVal(material.costPrice, 0) * qty);
-    const useId = await nextSeq(rawMaterialUsage, "id", "USE-", 1000);
+    const useId = nextSeqId(rawMaterialUsage, "id", "USE-", 1000);
     setRawMaterialUsage((prev) => [
       {
         id: useId,
@@ -305,7 +303,7 @@ export function RawMaterials({
       ...prev,
     ]);
     setToast(
-      `${qty} ${material.unit} of ${material.name} recorded as used on ${fmtDate(entryDate)}. ${remaining} ${material.unit} remaining. Stock movement only \u2014 no expense posted.`,
+      `${qty} ${material.unit} of ${material.name} recorded as used on ${fmtDate(entryDate)}. ${remaining} ${material.unit} remaining. Stock movement only — no expense posted.`,
     );
     setEntryMaterialId("");
     setEntryQty("");
@@ -318,7 +316,7 @@ export function RawMaterials({
           <h1 className="text-xl font-bold">Raw Materials</h1>
           <p className={`text-sm ${subText}`}>
             {
-              "Purchased materials are held as an asset. Recording usage moves stock only \u2014 the cost reaches the Profit or Loss statement as Cost of Goods Sold, when the finished goods are sold."
+              "Purchased materials are held as an asset. Recording usage moves stock only — the cost reaches the Profit or Loss statement as Cost of Goods Sold, when the finished goods are sold."
             }
           </p>
         </div>
@@ -336,22 +334,21 @@ export function RawMaterials({
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Raw Materials Value</p>
-          <p className="text-xl font-bold mt-1">{money(totalValue)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Materials</p>
-          <p className="text-xl font-bold mt-1">{rawMaterials.length}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Available Stock</p>
-          <p className="text-xl font-bold mt-1">{totalStock}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Low Stock Materials</p>
-          <p className="text-xl font-bold mt-1 text-amber-600">{lowStockCount}</p>
-        </div>
+        <StatCard
+          label="Total Raw Materials Value"
+          value={money(totalValue)}
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard label="Materials" value={rawMaterials.length} cardBg={cardBg} subText={subText} />
+        <StatCard label="Total Available Stock" value={totalStock} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label="Low Stock Materials"
+          value={lowStockCount}
+          valueClass="text-amber-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -400,7 +397,7 @@ export function RawMaterials({
                 >
                   <td className="py-3 px-5 font-medium">{m.name}</td>
                   <td className={`py-3 px-2 ${subText}`}>{m.category}</td>
-                  <td className={`py-3 px-2 ${subText}`}>{m.supplier || "\u2014"}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{m.supplier || "—"}</td>
                   <td className={`py-3 px-2 ${subText}`}>{m.unit}</td>
                   <td className="py-3 px-2">{m.purchaseQty}</td>
                   <td className="py-3 px-2 font-medium">{m.availableQty}</td>
@@ -414,7 +411,7 @@ export function RawMaterials({
                   <td className="py-3 px-2 font-medium">
                     {money(round2(numVal(m.costPrice, 0) * numVal(m.availableQty, 0)))}
                   </td>
-                  <td className={`py-3 px-2 ${subText}`}>{m.batchNumber || "\u2014"}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{m.batchNumber || "—"}</td>
                   <td className="py-3 px-5">
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -450,7 +447,7 @@ export function RawMaterials({
           <h3 className="font-semibold mb-1">Daily Raw Material Usage</h3>
           <p className={`text-xs ${subText} mb-4`}>
             {
-              "Pick the date and record how much of a raw material was used that day. It's deducted from Available Quantity and added to the records below. This is a stock movement only \u2014 no expense is posted to the ledger."
+              "Pick the date and record how much of a raw material was used that day. It's deducted from Available Quantity and added to the records below. This is a stock movement only — no expense is posted to the ledger."
             }
           </p>
           <form
@@ -572,7 +569,7 @@ export function RawMaterials({
                     <td className="py-3 px-2">{u.qtyUsed}</td>
                     <td className="py-3 px-2">{u.remainingQty}</td>
                     <td className={`py-3 px-2 ${subText}`}>{u.user}</td>
-                    <td className={`py-3 px-2 ${subText} max-w-[240px] truncate`}>{u.notes || "\u2014"}</td>
+                    <td className={`py-3 px-2 ${subText} max-w-[240px] truncate`}>{u.notes || "—"}</td>
                     <td className="py-3 px-5">
                       <div className="flex items-center justify-end">
                         <button

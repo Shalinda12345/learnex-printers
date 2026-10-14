@@ -4,12 +4,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BACKUP_MODULES,
-  esc,
   backupRowToHTML,
   backupTableHTML,
   buildBackupHTML,
   parseBackupFile,
 } from "@/lib/learnex/backup";
+import { escapeHtml as esc } from "@/lib/learnex/utils";
 import { STORE_KEYS } from "@/lib/auth/permissions";
 
 const store = {

@@ -17,7 +17,6 @@ import { CATEGORY_COLORS, REVENUE_TREND } from "@/lib/learnex/seed";
 import { DonutChart, TrendChart } from "@/components/learnex/charts";
 import {
   NON_PNL_LABEL,
-  SEED_CASH_ACCOUNTS,
   cashAccountBalance,
   cashAccountOf,
   cashLinesFor,
@@ -28,6 +27,7 @@ import {
   payablesFromPOs,
   totalCash,
   txnKind,
+  withDefaultAccounts,
 } from "@/lib/learnex/accounting";
 import { downloadCSV, exportPDF, fmtDate, numVal, round2 } from "@/lib/learnex/utils";
 
@@ -35,7 +35,7 @@ export const REPORT_TYPES = [
   {
     key: "pnl",
     name: "Profit or Loss Statement",
-    desc: "Revenue, cost of sales, operating expenses and net profit. Stock and raw material purchases are excluded \u2014 they are asset purchases, not expenses.",
+    desc: "Revenue, cost of sales, operating expenses and net profit. Stock and raw material purchases are excluded — they are asset purchases, not expenses.",
     icon: TrendingUp,
   },
   {
@@ -133,7 +133,6 @@ export function Reports({
   dark,
   cardBg,
   subText,
-  hoverRow,
   setToast,
   products,
   customers,
@@ -163,7 +162,7 @@ export function Reports({
     let rows = [];
     let filename = key;
     let title = key;
-    const accs = cashAccounts && cashAccounts.length ? cashAccounts : SEED_CASH_ACCOUNTS;
+    const accs = withDefaultAccounts(cashAccounts);
     if (key === "pnl") {
       // A real Profit or Loss statement: revenue less cost of sales gives
       // gross profit, less operating expenses gives net profit. Stock and
@@ -220,8 +219,8 @@ export function Reports({
       pos.cashRows.forEach((c) => rows.push(["    " + c.name, c.balance]));
       rows.push(["    Total Cash & Bank", pos.cash]);
       rows.push(["    Trade Receivables", pos.receivables]);
-      rows.push(["    Inventory \u2014 Finished Goods (at cost)", pos.finishedGoods]);
-      rows.push(["    Inventory \u2014 Raw Materials (at cost)", pos.rawMaterialStock]);
+      rows.push(["    Inventory — Finished Goods (at cost)", pos.finishedGoods]);
+      rows.push(["    Inventory — Raw Materials (at cost)", pos.rawMaterialStock]);
       rows.push(["TOTAL ASSETS", pos.totalAssets]);
       rows.push(["", ""]);
       rows.push(["LIABILITIES", ""]);

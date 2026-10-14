@@ -21,10 +21,6 @@ export async function requireUser(options: { allowPendingPasswordChange?: boolea
   return user;
 }
 
-export function hasPermission(user: AuthUser, permission: string) {
-  return user.permissions.has(permission);
-}
-
 export function requirePermission(user: AuthUser, ...anyOf: string[]) {
   if (!anyOf.some((p) => user.permissions.has(p))) throw new ForbiddenError();
 }

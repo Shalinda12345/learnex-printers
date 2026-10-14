@@ -12,7 +12,7 @@ import {
   Trash2,
   Wallet,
 } from "@/components/learnex/icons";
-import { Badge, Field, FileUpload, Modal, inputCls } from "@/components/learnex/ui";
+import { Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   CASH_ACCOUNT_TYPES,
   NON_PNL_LABEL,
@@ -24,13 +24,13 @@ import {
   makeCashTxn,
   payablesFromPOs,
   receivablesFromOrders,
+  transferEntries,
   txnKind,
 } from "@/lib/learnex/accounting";
 import { downloadCSV, fmtDate, money, numVal, round2, todayISO } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
 
 /* =====================================================================
-   CASH & BANK \u2014 the cash accounts every payment flows through.
+   CASH & BANK — the cash accounts every payment flows through.
    Sales receipts, operating expenses and purchases of stock and raw
    materials all move through these accounts. What keeps a purchase out of
    the Profit or Loss statement is how it is classified, not which account
@@ -69,7 +69,7 @@ export function CashMoveModal({
         {cashAccounts.map((a) => (
           <option key={a.id} value={a.id}>
             {a.name}
-            {" \u2014 "}
+            {" — "}
             {money(cashAccountBalance(a.id, ledger, cashAccounts))}
           </option>
         ))}
@@ -82,7 +82,7 @@ export function CashMoveModal({
         {mode === "transfer" && (
           <p className={`text-xs ${subText}`}>
             {
-              "Moving your own money between your own accounts. This never affects profit \u2014 it only changes where the cash sits."
+              "Moving your own money between your own accounts. This never affects profit — it only changes where the cash sits."
             }
           </p>
         )}
@@ -96,7 +96,7 @@ export function CashMoveModal({
         {mode === "out" && (
           <p className={`text-xs ${subText}`}>
             {
-              "Money leaving an account that is not a business expense \u2014 for example the owner taking money out (drawings) or repaying a loan."
+              "Money leaving an account that is not a business expense — for example the owner taking money out (drawings) or repaying a loan."
             }
           </p>
         )}
@@ -153,7 +153,6 @@ export function CashMoveModal({
           onChange={setAttachment}
           dark={dark}
           subText={subText}
-          inputBg={inputBg}
         />
         {mode === "transfer" && fromAcc === toAcc && (
           <p className="text-xs text-amber-600">Choose two different accounts.</p>
@@ -194,7 +193,7 @@ export function CashAccountModal({ initial, onClose, onSave, dark, cardBg, subTe
             value={form.name}
             onChange={set("name")}
             className={inputCls(inputBg)}
-            placeholder={"e.g. Petty Cash \u2014 Workshop"}
+            placeholder={"e.g. Petty Cash — Workshop"}
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -278,65 +277,46 @@ export function CashAccounts({
     const a = cashAccounts.find((x) => x.id === id);
     return a ? a.name : id;
   };
-  async function saveMove({ mode, fromAcc, toAcc, amount, date, desc, source, attachment }) {
-    const additions = [];
-    // Awaited one at a time (not fired in parallel) so each later call's
-    // "ledger so far" (used as the offline fallback's local-max) already
-    // includes the earlier ones in this same transaction.
-    const push = async (o) => {
-      additions.push(await makeCashTxn({ ledger: [...ledger, ...additions], ...o }));
-    };
+  function saveMove({ mode, fromAcc, toAcc, amount, date, desc, source, attachment }) {
+    let additions;
     if (mode === "transfer") {
-      const note = desc || `Transfer ${accName(fromAcc)} \u2192 ${accName(toAcc)}`;
-      await push({
-        date,
-        desc: note,
-        type: "Expense",
-        category: "Cash Transfer",
-        amount,
-        account: fromAcc,
-        kind: "transfer",
-        attachment,
-      });
-      await push({
-        date,
-        desc: note,
-        type: "Income",
-        category: "Cash Transfer",
-        amount,
-        account: toAcc,
-        kind: "transfer",
-        attachment,
-      });
+      const note = desc || `Transfer ${accName(fromAcc)} → ${accName(toAcc)}`;
+      additions = transferEntries({ ledger, date, desc: note, amount, from: fromAcc, to: toAcc, attachment });
       setToast(
         `${money(amount)} transferred to ${accName(toAcc)}. Profit is unaffected — this is only a movement of your own cash.`,
       );
     } else if (mode === "in") {
       const kind =
         source === "Owner Capital" ? "capital_in" : source === "Loan Received" ? "ar_collection" : "revenue";
-      await push({
-        date,
-        desc: desc || `${source} received`,
-        type: "Income",
-        category: source,
-        amount,
-        account: toAcc,
-        kind,
-        attachment,
-      });
+      additions = [
+        makeCashTxn({
+          ledger,
+          date,
+          desc: desc || `${source} received`,
+          type: "Income",
+          category: source,
+          amount,
+          account: toAcc,
+          kind,
+          attachment,
+        }),
+      ];
       setToast(`${money(amount)} recorded into ${accName(toAcc)} as ${source}.`);
     } else {
       const kind = source === "Owner Drawings" ? "capital_out" : "ap_settlement";
-      await push({
-        date,
-        desc: desc || `${source}`,
-        type: "Expense",
-        category: source,
-        amount,
-        account: fromAcc,
-        kind,
-        attachment,
-      });
+      additions = [
+        makeCashTxn({
+          ledger,
+          date,
+          desc: desc || source,
+          type: "Expense",
+          category: source,
+          amount,
+          account: fromAcc,
+          kind,
+          attachment,
+        }),
+      ];
       setToast(`${money(amount)} recorded out of ${accName(fromAcc)} as ${source}.`);
     }
     setLedger((prev) => [...additions, ...prev]);
@@ -378,7 +358,7 @@ export function CashAccounts({
   // being funded. It moves the shortfall across from another account, so the
   // split between accounts finally matches the cash actually in hand. The
   // business total does not change, and profit is untouched.
-  async function topUpAccount(a) {
+  function topUpAccount(a) {
     const shortfall = round2(-a.balance);
     if (shortfall <= 0) return;
     const source =
@@ -393,39 +373,19 @@ export function CashAccounts({
     }
     if (
       !window.confirm(
-        `Move ${money(shortfall)} from "${source.name}" into "${a.name}"?\n\nThis records a transfer between your own accounts. Your total cash and your profit both stay exactly the same \u2014 only the split between the two accounts changes.`,
+        `Move ${money(shortfall)} from "${source.name}" into "${a.name}"?\n\nThis records a transfer between your own accounts. Your total cash and your profit both stay exactly the same — only the split between the two accounts changes.`,
       )
     )
       return;
-    const note = `Top-up \u2014 ${source.name} \u2192 ${a.name}`;
-    const date = todayISO();
-    const outId = await nextSeq(ledger, "id", "TXN-", 8821);
-    const inId = await nextSeq([...ledger, { id: outId }], "id", "TXN-", 8821);
-    setLedger((prev) => [
-      {
-        id: inId,
-        date,
-        desc: note,
-        type: "Income",
-        category: "Cash Transfer",
-        amount: shortfall,
-        account: a.id,
-        kind: "transfer",
-        attachment: null,
-      },
-      {
-        id: outId,
-        date,
-        desc: note,
-        type: "Expense",
-        category: "Cash Transfer",
-        amount: shortfall,
-        account: source.id,
-        kind: "transfer",
-        attachment: null,
-      },
-      ...prev,
-    ]);
+    const [out, inn] = transferEntries({
+      ledger,
+      date: todayISO(),
+      desc: `Top-up — ${source.name} → ${a.name}`,
+      amount: shortfall,
+      from: source.id,
+      to: a.id,
+    });
+    setLedger((prev) => [inn, out, ...prev]);
     setToast(
       `${money(shortfall)} moved from ${source.name} into ${a.name}. Both balances now match your real cash.`,
     );
@@ -490,25 +450,35 @@ export function CashAccounts({
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>{"Total Cash & Bank"}</p>
-          <p className={`text-xl font-bold mt-1 ${grand >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-            {money(grand)}
-          </p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>{"Spent on Stock & Materials"}</p>
-          <p className="text-xl font-bold mt-1">{money(spentOnPurchases)}</p>
-          <p className={`text-xs ${subText} mt-1`}>{"Cash out, inventory in \u2014 never an expense"}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Receivable (owed to you)</p>
-          <p className="text-xl font-bold mt-1 text-amber-600">{money(receivables)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Payable (you owe suppliers)</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{money(payables)}</p>
-        </div>
+        <StatCard
+          label={"Total Cash & Bank"}
+          value={money(grand)}
+          valueClass={grand >= 0 ? "text-emerald-600" : "text-red-600"}
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label={"Spent on Stock & Materials"}
+          value={money(spentOnPurchases)}
+          cardBg={cardBg}
+          subText={subText}
+        >
+          <p className={`text-xs ${subText} mt-1`}>{"Cash out, inventory in — never an expense"}</p>
+        </StatCard>
+        <StatCard
+          label="Receivable (owed to you)"
+          value={money(receivables)}
+          valueClass="text-amber-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Payable (you owe suppliers)"
+          value={money(payables)}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       {rows.some((a) => a.balance < 0) && (
         <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
@@ -518,7 +488,7 @@ export function CashAccounts({
               <p className="text-sm font-medium">An account has been paid out of without being funded</p>
               <p className={`text-xs ${subText} mt-1 leading-relaxed`}>
                 {
-                  "Your total cash is still correct \u2014 the money really did leave the business \u2014 and your profit is unaffected. But the split between accounts does not match what is in your hand, because the payment came out of an account that had nothing in it. Move the shortfall across from the account the money actually came from:"
+                  "Your total cash is still correct — the money really did leave the business — and your profit is unaffected. But the split between accounts does not match what is in your hand, because the payment came out of an account that had nothing in it. Move the shortfall across from the account the money actually came from:"
                 }
               </p>
               <div className="flex gap-2 flex-wrap mt-3">

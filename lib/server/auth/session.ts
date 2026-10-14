@@ -35,7 +35,7 @@ export interface AuthUser {
 }
 
 /** Was this request made over HTTPS (directly or via a proxy that says so)? */
-export function isHttps(request: Request) {
+function isHttps(request: Request) {
   const forwarded = request.headers.get("x-forwarded-proto");
   if (forwarded) return forwarded.split(",")[0].trim() === "https";
   return new URL(request.url).protocol === "https:";
@@ -71,7 +71,7 @@ async function currentToken() {
   return jar.get(SECURE_COOKIE)?.value ?? jar.get(PLAIN_COOKIE)?.value ?? null;
 }
 
-export async function clearSessionCookie() {
+async function clearSessionCookie() {
   const jar = await cookies();
   jar.delete(SECURE_COOKIE);
   jar.delete(PLAIN_COOKIE);

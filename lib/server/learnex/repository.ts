@@ -12,12 +12,9 @@ import {
   type ReplaceStore,
   type SingleStore,
 } from "@/lib/server/learnex/stores";
-
 import { BadRequestError, ForbiddenError } from "@/lib/server/errors";
 import { audit, type Actor } from "@/lib/server/audit";
 import { STORE_LABELS, type StoreAccess, type StoreKey } from "@/lib/auth/permissions";
-
-export { BadRequestError };
 
 type Rec = Record<string, unknown>;
 export type AccessMap = Partial<Record<StoreKey, StoreAccess>>;
