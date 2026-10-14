@@ -188,7 +188,7 @@ export function SettingsPage({
               >
                 <option>LKR (Rs.)</option>
                 <option>USD ($)</option>
-                <option>{"INR (\u20B9)"}</option>
+                <option>{"INR (₹)"}</option>
               </select>
             </div>
           </div>

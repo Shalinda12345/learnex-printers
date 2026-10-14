@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Field, Modal, inputCls } from "@/components/learnex/ui";
+import { Badge, Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import { CATEGORY_COLORS } from "@/lib/learnex/seed";
 import { Pencil, Plus, Save, Search, Trash2 } from "@/components/learnex/icons";
 import { money, nextNumId, numVal, round2, stockStatus } from "@/lib/learnex/utils";
@@ -188,22 +188,22 @@ export function Inventory({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
         </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Stock Value</p>
-          <p className="text-xl font-bold mt-1">{money(totalValue)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total SKUs</p>
-          <p className="text-xl font-bold mt-1">{products.length}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Low Stock</p>
-          <p className="text-xl font-bold mt-1 text-amber-600">{lowStock}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Out of Stock</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{outOfStock}</p>
-        </div>
+        <StatCard label="Total Stock Value" value={money(totalValue)} cardBg={cardBg} subText={subText} />
+        <StatCard label="Total SKUs" value={products.length} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label="Low Stock"
+          value={lowStock}
+          valueClass="text-amber-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Out of Stock"
+          value={outOfStock}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">

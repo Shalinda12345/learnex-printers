@@ -1,21 +1,16 @@
 import { useState } from "react";
-import { AttachmentLink, Badge, Field, FileUpload, Modal, inputCls } from "@/components/learnex/ui";
-import { MAIN_CASH_ID } from "@/lib/learnex/accounting";
+import { AttachmentLink, Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
+import { MAIN_CASH_ID, nextTxnId } from "@/lib/learnex/accounting";
 import { Plus, Save, Search, Trash2, Wallet } from "@/components/learnex/icons";
-import { fmtDate, money, numVal, round2, todayISO } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
+import { fmtDate, money, nextSeqId, numVal, round2, todayISO } from "@/lib/learnex/utils";
 
 /* =====================================================================
    SALES ORDERS — with New Order form (+ optional invoice attachment)
 ===================================================================== */
 export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputBg, products, customers }) {
-  var _a, _b;
-  const [customerId, setCustomerId] = useState(
-    ((_a = customers[0]) === null || _a === void 0 ? void 0 : _a.id) || "",
-  );
-  const [items, setItems] = useState([
-    { productId: ((_b = products[0]) === null || _b === void 0 ? void 0 : _b.id) || "", qty: 1 },
-  ]);
+  const [customerId, setCustomerId] = useState(customers[0]?.id || "");
+  const newRow = () => ({ productId: products[0]?.id || "", qty: 1 });
+  const [items, setItems] = useState(() => [newRow()]);
   const [status, setStatus] = useState("Processing");
   const [payment, setPayment] = useState("Pending");
   const [attachment, setAttachment] = useState(null);
@@ -23,13 +18,7 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function addRow() {
-    setItems((prev) => {
-      var _a;
-      return [
-        ...prev,
-        { productId: ((_a = products[0]) === null || _a === void 0 ? void 0 : _a.id) || "", qty: 1 },
-      ];
-    });
+    setItems((prev) => [...prev, newRow()]);
   }
   function removeRow(i) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
@@ -142,7 +131,6 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
           onChange={setAttachment}
           dark={dark}
           subText={subText}
-          inputBg={inputBg}
         />
         <div
           className={`flex justify-between items-center pt-3 border-t ${dark ? "border-slate-800" : "border-slate-100"} text-sm`}
@@ -200,7 +188,7 @@ export function SalesOrders({
   const processing = salesOrders.filter((o) => o.status === "Processing").length;
   const overdue = salesOrders.filter((o) => o.payment === "Overdue").length;
   const creditOutstanding = round2(salesOrders.reduce((s, o) => s + balOf(o), 0));
-  async function recordPayment(o, rawAmt) {
+  function recordPayment(o, rawAmt) {
     const bal = balOf(o);
     const amt = round2(rawAmt);
     if (!(amt > 0)) {
@@ -228,18 +216,17 @@ export function SalesOrders({
         ),
       );
     }
-    // delivery credit bills were already booked as sales income when the run
-    // was closed, so collecting the money must not book the income twice
-    // Invoices raised after the accounting upgrade already recognised their
-    // revenue on the day of sale, so collecting the money is only a cash
-    // receipt against the receivable — never income counted twice.
-    const txnId = await nextSeq(ledger, "id", "TXN-", 8821);
+    // Invoices raised after the accounting upgrade (and delivery credit bills)
+    // already recognised their revenue on the day of sale, so collecting the
+    // money is only a cash receipt against the receivable — never income
+    // counted twice.
+    const txnId = nextTxnId(ledger);
     if (o.accrued || o.fromDelivery) {
       setLedger((prev) => [
         {
           id: txnId,
           date,
-          desc: `Receipt from ${o.customer} \u2014 ${o.invoice || o.id}`,
+          desc: `Receipt from ${o.customer} — ${o.invoice || o.id}`,
           type: "Income",
           category: "Receivable Collection",
           amount: amt,
@@ -254,7 +241,7 @@ export function SalesOrders({
         {
           id: txnId,
           date,
-          desc: `Payment received \u2014 ${o.invoice || o.id}`,
+          desc: `Payment received — ${o.invoice || o.id}`,
           type: "Income",
           category: "Sales",
           amount: amt,
@@ -275,14 +262,14 @@ export function SalesOrders({
   }
   const statusTone = { Processing: "amber", Shipped: "blue", Delivered: "green", Cancelled: "red" };
   const paymentTone = { Paid: "green", Pending: "amber", Overdue: "red", Refunded: "slate" };
-  async function saveOrder({ customerId, lineItems, subtotal, status, payment, attachment }) {
+  function saveOrder({ customerId, lineItems, subtotal, status, payment, attachment }) {
     const taxRate = Number(settings.taxRate) || 0;
     const tax = round2(subtotal * (taxRate / 100));
     const total = round2(subtotal + tax);
     const customer = customers.find((c) => c.id === customerId);
     const date = todayISO();
-    const invoice = await nextSeq(salesOrders, "invoice", "INV-", 2461);
-    const soId = await nextSeq(salesOrders, "id", "SO-", 1042);
+    const invoice = nextSeqId(salesOrders, "invoice", "INV-", 2461);
+    const soId = nextSeqId(salesOrders, "id", "SO-", 1042);
     setProducts((prev) =>
       prev.map((p) => {
         const li = lineItems.find((l) => l.productId === p.id);
@@ -333,9 +320,9 @@ export function SalesOrders({
     );
     const additions = [
       {
-        id: await nextSeq(ledger, "id", "TXN-", 8821),
+        id: nextTxnId(ledger),
         date,
-        desc: `Sales revenue \u2014 ${invoice} (${customer.name})`,
+        desc: `Sales revenue — ${invoice} (${customer.name})`,
         type: "Income",
         category: "Sales",
         amount: round2(total),
@@ -347,9 +334,9 @@ export function SalesOrders({
     ];
     if (cogsAmount > 0) {
       additions.push({
-        id: await nextSeq([...ledger, ...additions], "id", "TXN-", 8821),
+        id: nextTxnId([...ledger, ...additions]),
         date,
-        desc: `Cost of goods sold \u2014 ${invoice}`,
+        desc: `Cost of goods sold — ${invoice}`,
         type: "Expense",
         category: "Cost of Goods Sold",
         amount: cogsAmount,
@@ -418,28 +405,29 @@ export function SalesOrders({
         </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Order Value</p>
-          <p className="text-xl font-bold mt-1">{money(totalValue)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Outstanding to Collect</p>
-          <p className={`text-xl font-bold mt-1 ${creditOutstanding > 0 ? "text-amber-600" : ""}`}>
-            {money(creditOutstanding)}
-          </p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Orders</p>
-          <p className="text-xl font-bold mt-1">{salesOrders.length}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Processing</p>
-          <p className="text-xl font-bold mt-1 text-amber-600">{processing}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Overdue Payment</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{overdue}</p>
-        </div>
+        <StatCard label="Total Order Value" value={money(totalValue)} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label="Outstanding to Collect"
+          value={money(creditOutstanding)}
+          valueClass={creditOutstanding > 0 ? "text-amber-600" : ""}
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard label="Total Orders" value={salesOrders.length} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label="Processing"
+          value={processing}
+          valueClass="text-amber-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Overdue Payment"
+          value={overdue}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -609,7 +597,7 @@ export function SalesOrders({
                   <div key={i} className="flex justify-between text-xs py-1">
                     <span>
                       {li.name}
-                      {" \u00D7 "}
+                      {" × "}
                       {li.qty}
                     </span>
                     <span>{money(li.price * li.qty)}</span>

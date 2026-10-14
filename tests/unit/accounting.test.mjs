@@ -26,6 +26,9 @@ import {
   equityMovements,
   computeFinancialPosition,
   makeCashTxn,
+  nextTxnId,
+  transferEntries,
+  withDefaultAccounts,
 } from "@/lib/learnex/accounting";
 import { todayISO } from "@/lib/learnex/utils";
 
@@ -386,8 +389,8 @@ describe("Statement of Financial Position", () => {
 });
 
 describe("posting a cash movement", () => {
-  test("ACCT-23 makeCashTxn numbers the line after the highest TXN id and fills defaults", async () => {
-    const t = await makeCashTxn({
+  test("ACCT-23 makeCashTxn numbers the line after the highest TXN id and fills defaults", () => {
+    const t = makeCashTxn({
       ledger: LEDGER,
       desc: "Rent",
       type: "Expense",
@@ -403,8 +406,8 @@ describe("posting a cash movement", () => {
     assert.equal(t.attachment, null);
   });
 
-  test("ACCT-24 the first ledger line is TXN-8822; given values are kept", async () => {
-    const t = await makeCashTxn({
+  test("ACCT-24 the first ledger line is TXN-8822; given values are kept", () => {
+    const t = makeCashTxn({
       ledger: [],
       date: "2026-03-01",
       desc: "Capital",
@@ -427,5 +430,39 @@ describe("posting a cash movement", () => {
       cash: true,
       attachment: null,
     });
+  });
+});
+
+describe("moving money between own accounts", () => {
+  test("ACCT-25 a transfer is a line out of one account and a line into the other, under the next ids", () => {
+    const [out, inn] = transferEntries({
+      ledger: LEDGER,
+      date: "2026-03-02",
+      desc: "Top-up",
+      amount: 50.005,
+      from: MAIN_CASH_ID,
+      to: BANK_CASH_ID,
+    });
+    assert.equal(out.id, nextTxnId(LEDGER));
+    assert.equal(inn.id, nextTxnId([...LEDGER, out]));
+    assert.deepEqual(
+      [out.type, out.account, inn.type, inn.account],
+      ["Expense", MAIN_CASH_ID, "Income", BANK_CASH_ID],
+    );
+    for (const t of [out, inn]) {
+      assert.equal(t.category, "Cash Transfer");
+      assert.equal(t.kind, "transfer");
+      assert.equal(t.amount, 50.01);
+      assert.equal(t.attachment, null);
+      assert.equal(isPnlTxn(t), false, "a transfer never touches profit");
+    }
+    const after = [...LEDGER, out, inn];
+    assert.equal(totalCash(after, ACCOUNTS), totalCash(LEDGER, ACCOUNTS), "total cash is unchanged");
+  });
+
+  test("ACCT-26 the built-in accounts stand in until the user's accounts are loaded", () => {
+    assert.equal(withDefaultAccounts(undefined), SEED_CASH_ACCOUNTS);
+    assert.equal(withDefaultAccounts([]), SEED_CASH_ACCOUNTS);
+    assert.equal(withDefaultAccounts(ACCOUNTS), ACCOUNTS);
   });
 });

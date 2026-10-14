@@ -1,5 +1,4 @@
-// Unit tests for the shared helpers (lib/learnex/utils.js) and the reference
-// number generator in lib/learnex/persistence.js.
+// Unit tests for the shared helpers (lib/learnex/utils.js).
 import { test, describe, after } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -10,6 +9,7 @@ import {
   weightedAvgCost,
   money,
   numVal,
+  localISO,
   todayISO,
   isInPeriod,
   PERIODS,
@@ -22,9 +22,8 @@ import {
   nextSeqId,
   rangePresets,
 } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
 
-const localISO = (d) =>
+const localDay = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 describe("numbers", () => {
@@ -87,7 +86,7 @@ describe("money", () => {
 
 describe("dates and periods", () => {
   test("UTIL-8 today is the local calendar date (not UTC)", () => {
-    assert.equal(todayISO(), localISO(new Date()));
+    assert.equal(todayISO(), localDay(new Date()));
   });
 
   test("UTIL-9 isInPeriod: daily, weekly (last 7 days), monthly, annually and all time", () => {
@@ -133,9 +132,14 @@ describe("dates and periods", () => {
     assert.deepEqual(Object.keys(presets), ["Today", "Last 7 days", "This month", "This year"]);
     assert.deepEqual([presets.Today.from, presets.Today.to], [t, t]);
     const weekAgo = new Date(new Date(t + "T00:00:00").getTime() - 6 * 86400000);
-    assert.equal(presets["Last 7 days"].from, localISO(weekAgo));
+    assert.equal(presets["Last 7 days"].from, localDay(weekAgo));
     assert.equal(presets["This month"].from, t.slice(0, 7) + "-01");
     assert.equal(presets["This year"].from, t.slice(0, 4) + "-01-01");
+  });
+
+  test("UTIL-17 localISO uses the local calendar day, zero-padded, even just after midnight", () => {
+    assert.equal(localISO(new Date(2026, 0, 5, 0, 30)), "2026-01-05");
+    assert.equal(localISO(new Date(2026, 11, 31, 23, 59)), "2026-12-31");
   });
 });
 
@@ -156,14 +160,14 @@ describe("stock and ids", () => {
     assert.ok(many.size > 1);
   });
 
-  test("UTIL-16 reference numbers continue from the highest one (SO-, INV-, PO-, TXN-…)", async () => {
+  test("UTIL-16 reference numbers continue from the highest one (SO-, INV-, PO-, TXN-…)", () => {
     assert.equal(nextSeqId([{ id: "SO-1042" }, { id: "SO-1050" }], "id", "SO-"), "SO-1051");
     assert.equal(nextSeqId([], "id", "SO-"), "SO-1001");
     assert.equal(nextSeqId([], "id", "X-", 0, 4), "X-0001");
     assert.equal(
-      await nextSeq([{ invoice: "INV-2461" }, { invoice: "junk" }], "invoice", "INV-", 2461),
+      nextSeqId([{ invoice: "INV-2461" }, { invoice: "junk" }], "invoice", "INV-", 2461),
       "INV-2462",
     );
-    assert.equal(await nextSeq([], "id", "PO-", 4000), "PO-4001");
+    assert.equal(nextSeqId([], "id", "PO-", 4000), "PO-4001");
   });
 });

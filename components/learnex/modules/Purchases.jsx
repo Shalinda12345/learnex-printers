@@ -1,17 +1,27 @@
 import { useState } from "react";
-import { AttachmentLink, Badge, Field, FileUpload, Modal, inputCls } from "@/components/learnex/ui";
+import { AttachmentLink, Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   MAIN_CASH_ID,
-  SEED_CASH_ACCOUNTS,
   cashAccountBalance,
   computeNonPnL,
+  nextTxnId,
   payablesFromPOs,
   totalCash,
+  transferEntries,
   txnKind,
+  withDefaultAccounts,
 } from "@/lib/learnex/accounting";
 import { Plus, Save, Search, Trash2, Wallet } from "@/components/learnex/icons";
-import { fmtDate, money, numVal, round2, round6, todayISO, weightedAvgCost } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
+import {
+  fmtDate,
+  money,
+  nextSeqId,
+  numVal,
+  round2,
+  round6,
+  todayISO,
+  weightedAvgCost,
+} from "@/lib/learnex/utils";
 
 /* =====================================================================
    PURCHASES — new page: create purchase orders, upload supplier invoice
@@ -29,38 +39,24 @@ export function PurchaseOrderModal({
   cashAccounts,
   ledger,
 }) {
-  var _a, _b, _c;
-  const [supplierId, setSupplierId] = useState(
-    ((_a = suppliers[0]) === null || _a === void 0 ? void 0 : _a.id) || "",
-  );
-  const [items, setItems] = useState([
-    {
-      materialId: ((_b = rawMaterials[0]) === null || _b === void 0 ? void 0 : _b.id) || "",
-      qty: 1,
-      cost: ((_c = rawMaterials[0]) === null || _c === void 0 ? void 0 : _c.costPrice) || 0,
-    },
-  ]);
+  const [supplierId, setSupplierId] = useState(suppliers[0]?.id || "");
+  const newRow = () => ({
+    materialId: rawMaterials[0]?.id || "",
+    qty: 1,
+    cost: rawMaterials[0]?.costPrice || 0,
+  });
+  const [items, setItems] = useState(() => [newRow()]);
   const [attachment, setAttachment] = useState(null);
   function updateItem(i, patch) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function addRow() {
-    setItems((prev) => {
-      var _a, _b;
-      return [
-        ...prev,
-        {
-          materialId: ((_a = rawMaterials[0]) === null || _a === void 0 ? void 0 : _a.id) || "",
-          qty: 1,
-          cost: ((_b = rawMaterials[0]) === null || _b === void 0 ? void 0 : _b.costPrice) || 0,
-        },
-      ];
-    });
+    setItems((prev) => [...prev, newRow()]);
   }
   function removeRow(i) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
   }
-  const accs = cashAccounts && cashAccounts.length ? cashAccounts : SEED_CASH_ACCOUNTS;
+  const accs = withDefaultAccounts(cashAccounts);
   // Default to the account the money genuinely comes out of. Keeping purchases
   // out of the Profit or Loss statement comes from how they are classified, not
   // from which account pays, so paying from real cash is both simpler and
@@ -195,7 +191,6 @@ export function PurchaseOrderModal({
           onChange={setAttachment}
           dark={dark}
           subText={subText}
-          inputBg={inputBg}
         />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Settlement" subText={subText}>
@@ -204,8 +199,8 @@ export function PurchaseOrderModal({
               onChange={(e) => setPayMode(e.target.value)}
               className={inputCls(inputBg)}
             >
-              <option value="Paid">{"Paid now \u2014 cash out"}</option>
-              <option value="Unpaid">{"On credit \u2014 pay supplier later"}</option>
+              <option value="Paid">{"Paid now — cash out"}</option>
+              <option value="Unpaid">{"On credit — pay supplier later"}</option>
             </select>
           </Field>
           {payMode === "Paid" && (
@@ -243,7 +238,7 @@ export function PurchaseOrderModal({
                 <p className="text-xs font-medium">
                   {"This account is short by "}
                   {money(round2(total - payBalance))}
-                  {" \u2014 move it across automatically"}
+                  {" — move it across automatically"}
                 </p>
                 <p className={`text-xs ${subText} mt-1 leading-relaxed`}>
                   The shortfall is transferred in before the purchase is paid, so no account is ever left with
@@ -259,7 +254,7 @@ export function PurchaseOrderModal({
                       <option key={a.id} value={a.id}>
                         {"Move from "}
                         {a.name}
-                        {" \u2014 "}
+                        {" — "}
                         {money(cashAccountBalance(a.id, ledger || [], accs))}
                       </option>
                     ))}
@@ -272,7 +267,7 @@ export function PurchaseOrderModal({
         {payMode === "Paid" && total > payBalance && !autoTopUp && (
           <p className="text-xs text-amber-600">
             {
-              "Without the transfer this account will go below zero. The purchase is still recorded correctly \u2014 you can top it up later from Cash & Bank."
+              "Without the transfer this account will go below zero. The purchase is still recorded correctly — you can top it up later from Cash & Bank."
             }
           </p>
         )}
@@ -325,7 +320,7 @@ export function Purchases({
       o.supplier.toLowerCase().includes(query.toLowerCase()),
   );
   const totalValue = purchaseOrders.reduce((s, o) => s + o.total, 0);
-  const accs = cashAccounts && cashAccounts.length ? cashAccounts : SEED_CASH_ACCOUNTS;
+  const accs = withDefaultAccounts(cashAccounts);
   // Purchases are paid with ordinary cash, so the default paying account is
   // simply the cash account.
   const purchaseAccId = (accs.find((a) => a.purpose === "general" && a.type === "Cash") || accs[0]).id;
@@ -337,7 +332,7 @@ export function Purchases({
     return a ? a.name : "Cash";
   };
   const poIsUnpaid = (o) => o.paymentStatus === "Unpaid";
-  async function savePurchase({
+  function savePurchase({
     supplierId,
     lineItems,
     total,
@@ -349,7 +344,7 @@ export function Purchases({
   }) {
     const supplier = suppliers.find((s) => s.id === supplierId);
     const date = todayISO();
-    const poId = await nextSeq(purchaseOrders, "id", "PO-", 4000);
+    const poId = nextSeqId(purchaseOrders, "id", "PO-", 4000);
     const unpaid = payMode === "Unpaid";
     const payAcc = account || purchaseAccId;
     // Purchasing never touches finished-goods inventory. Purchased raw
@@ -389,40 +384,25 @@ export function Purchases({
       const bal = cashAccountBalance(payAcc, ledger, accs);
       const shortfall = round2(numVal(total, 0) - bal);
       if (shortfall > 0) {
-        const note = `Top-up for ${poId} \u2014 ${accName(topUpFrom)} \u2192 ${accName(payAcc)}`;
-        const outId = await nextSeq(ledger, "id", "TXN-", 8821);
-        additions.push({
-          id: outId,
-          date,
-          desc: note,
-          type: "Expense",
-          category: "Cash Transfer",
-          amount: shortfall,
-          account: topUpFrom,
-          kind: "transfer",
-          attachment: null,
-        });
-        const inId = await nextSeq([...ledger, ...additions], "id", "TXN-", 8821);
-        additions.push({
-          id: inId,
-          date,
-          desc: note,
-          type: "Income",
-          category: "Cash Transfer",
-          amount: shortfall,
-          account: payAcc,
-          kind: "transfer",
-          attachment: null,
-        });
+        additions.push(
+          ...transferEntries({
+            ledger,
+            date,
+            desc: `Top-up for ${poId} — ${accName(topUpFrom)} → ${accName(payAcc)}`,
+            amount: shortfall,
+            from: topUpFrom,
+            to: payAcc,
+          }),
+        );
         toppedUp = shortfall;
       }
     }
-    const txnId = unpaid ? null : await nextSeq([...ledger, ...additions], "id", "TXN-", 8821);
+    const txnId = unpaid ? null : nextTxnId([...ledger, ...additions]);
     if (txnId) {
       additions.push({
         id: txnId,
         date,
-        desc: `Stock / raw material purchase \u2014 ${supplier.name} (${poId})`,
+        desc: `Stock / raw material purchase — ${supplier.name} (${poId})`,
         type: "Expense",
         category: "Stock & Raw Material Purchase",
         amount: round2(total),
@@ -455,24 +435,24 @@ export function Purchases({
     }
     setToast(
       unpaid
-        ? `Purchase order ${poId} recorded on credit \u2014 ${money(total)} now shows as a payable. Raw material stock updated; profit unaffected.`
+        ? `Purchase order ${poId} recorded on credit — ${money(total)} now shows as a payable. Raw material stock updated; profit unaffected.`
         : toppedUp > 0
-          ? `Purchase order ${poId} recorded \u2014 ${money(total)} paid from ${accName(payAcc)}, after moving ${money(toppedUp)} across from ${accName(topUpFrom)}. No account is left below zero and your profit is unaffected.`
-          : `Purchase order ${poId} recorded \u2014 ${money(total)} paid from ${accName(payAcc)}. Raw material stock updated; this is an asset purchase, so your profit is unaffected.`,
+          ? `Purchase order ${poId} recorded — ${money(total)} paid from ${accName(payAcc)}, after moving ${money(toppedUp)} across from ${accName(topUpFrom)}. No account is left below zero and your profit is unaffected.`
+          : `Purchase order ${poId} recorded — ${money(total)} paid from ${accName(payAcc)}. Raw material stock updated; this is an asset purchase, so your profit is unaffected.`,
     );
     setModalOpen(false);
   }
-  async function settlePurchase(o) {
+  function settlePurchase(o) {
     const bal = round2(numVal(o.total, 0) - numVal(o.amountPaid, 0));
     if (bal <= 0) return;
     const acc = purchaseAccId;
     if (!window.confirm(`Pay ${money(bal)} to ${o.supplier} for ${o.id} from "${accName(acc)}"?`)) return;
-    const txnId = await nextSeq(ledger, "id", "TXN-", 8821);
+    const txnId = nextTxnId(ledger);
     setLedger((prev) => [
       {
         id: txnId,
         date: todayISO(),
-        desc: `Supplier payment \u2014 ${o.supplier} (${o.id})`,
+        desc: `Supplier payment — ${o.supplier} (${o.id})`,
         type: "Expense",
         category: "Supplier Payment",
         amount: bal,
@@ -499,7 +479,7 @@ export function Purchases({
       s && s.id === o.id ? { ...s, paymentStatus: "Paid", amountPaid: round2(numVal(s.total, 0)) } : s,
     );
     setToast(
-      `${money(bal)} paid to ${o.supplier}. The payable is cleared and your profit is unchanged \u2014 settling a bill is not an expense.`,
+      `${money(bal)} paid to ${o.supplier}. The payable is cleared and your profit is unchanged — settling a bill is not an expense.`,
     );
   }
   function deletePurchase(o) {
@@ -553,7 +533,7 @@ export function Purchases({
     );
     setPurchaseOrders((prev) => prev.filter((x) => x.id !== o.id));
     setSelected((s) => (s && s.id === o.id ? null : s));
-    setToast(`Purchase order ${o.id} deleted \u2014 stock, cash and supplier totals all reversed.`);
+    setToast(`Purchase order ${o.id} deleted — stock, cash and supplier totals all reversed.`);
   }
   return (
     <div className="space-y-5">
@@ -574,31 +554,30 @@ export function Purchases({
         </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Purchased</p>
-          <p className="text-xl font-bold mt-1">{money(totalValue)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Purchase Orders</p>
-          <p className="text-xl font-bold mt-1">{purchaseOrders.length}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>{"Cash & Bank Available"}</p>
-          <p className={`text-xl font-bold mt-1 ${cashAvailable >= 0 ? "" : "text-red-600"}`}>
-            {money(cashAvailable)}
-          </p>
+        <StatCard label="Total Purchased" value={money(totalValue)} cardBg={cardBg} subText={subText} />
+        <StatCard label="Purchase Orders" value={purchaseOrders.length} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label={"Cash & Bank Available"}
+          value={money(cashAvailable)}
+          valueClass={cashAvailable >= 0 ? "" : "text-red-600"}
+          cardBg={cardBg}
+          subText={subText}
+        >
           <p className={`text-xs ${subText} mt-1`}>What you can pay suppliers with</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Owed to Suppliers</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{money(outstanding)}</p>
-        </div>
+        </StatCard>
+        <StatCard
+          label="Owed to Suppliers"
+          value={money(outstanding)}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
         <p className="text-sm font-medium">Why purchases never reduce your profit</p>
         <p
           className={`text-xs ${subText} mt-1 leading-relaxed`}
-        >{`Buying stock swaps cash for inventory \u2014 you are no worse off, so nothing is charged to profit. ${money(spentOnPurchases)} has been spent on purchases so far and none of it has touched your profit. Using the material does not charge it either \u2014 that is a stock movement. The cost is charged in one place only: Cost of Goods Sold, when the finished item is sold. It appears on the Profit or Loss statement in the Accounting section.`}</p>
+        >{`Buying stock swaps cash for inventory — you are no worse off, so nothing is charged to profit. ${money(spentOnPurchases)} has been spent on purchases so far and none of it has touched your profit. Using the material does not charge it either — that is a stock movement. The cost is charged in one place only: Cost of Goods Sold, when the finished item is sold. It appears on the Profit or Loss statement in the Accounting section.`}</p>
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5">
@@ -713,7 +692,7 @@ export function Purchases({
                     <div key={i} className="flex justify-between text-xs py-1">
                       <span>
                         {li.name}
-                        {" \u00D7 "}
+                        {" × "}
                         {li.qty}
                       </span>
                       <span>{money(li.cost * li.qty)}</span>
@@ -731,7 +710,7 @@ export function Purchases({
                 <span className={subText}>Settlement</span>
                 <span>
                   {poIsUnpaid(selected) ? (
-                    <Badge tone="amber">{`Unpaid \u2014 ${money(round2(numVal(selected.total, 0) - numVal(selected.amountPaid, 0)))} owed`}</Badge>
+                    <Badge tone="amber">{`Unpaid — ${money(round2(numVal(selected.total, 0) - numVal(selected.amountPaid, 0)))} owed`}</Badge>
                   ) : (
                     <Badge tone="green">{`Paid from ${accName(selected.cashAccount || MAIN_CASH_ID)}`}</Badge>
                   )}
@@ -745,7 +724,7 @@ export function Purchases({
               )}
               <p className={`text-xs ${subText}`}>
                 {
-                  "This purchase increased your raw material stock. It was not charged to profit \u2014 you will find it on the Statement of Financial Position under Inventory."
+                  "This purchase increased your raw material stock. It was not charged to profit — you will find it on the Statement of Financial Position under Inventory."
                 }
               </p>
               <AttachmentLink attachment={selected.attachment} subText={subText} />

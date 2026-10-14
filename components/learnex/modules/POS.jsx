@@ -2,9 +2,8 @@ import { useState } from "react";
 import { Badge, Field, inputCls } from "@/components/learnex/ui";
 import { CATEGORY_COLORS } from "@/lib/learnex/seed";
 import { Minus, Package, Plus, Search, ShoppingCart, Trash2 } from "@/components/learnex/icons";
-import { SEED_CASH_ACCOUNTS } from "@/lib/learnex/accounting";
-import { money, numVal, round2, stockStatus, todayISO } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
+import { nextTxnId, withDefaultAccounts } from "@/lib/learnex/accounting";
+import { money, nextSeqId, numVal, round2, stockStatus, todayISO } from "@/lib/learnex/utils";
 
 /* =====================================================================
    POS
@@ -14,7 +13,6 @@ export function POS({
   cardBg,
   subText,
   inputBg,
-  hoverRow,
   setToast,
   products,
   setProducts,
@@ -31,7 +29,7 @@ export function POS({
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState([]);
   const [payment, setPayment] = useState("Cash");
-  const accs = cashAccounts && cashAccounts.length ? cashAccounts : SEED_CASH_ACCOUNTS;
+  const accs = withDefaultAccounts(cashAccounts);
   // Money paid by Card or Bank never touches the physical cash drawer, so it
   // must land in a Bank-type account, not the Cash account — otherwise the
   // Cash Account balance ends up overstated (money that was never actually
@@ -56,9 +54,7 @@ export function POS({
   }
   function changeQty(id, delta) {
     setCart((c) =>
-      c
-        .map((i) => (i.id === id ? { ...i, qty: Math.max(1, Math.min(i.qty + delta, i.stock)) } : i))
-        .filter(Boolean),
+      c.map((i) => (i.id === id ? { ...i, qty: Math.max(1, Math.min(i.qty + delta, i.stock)) } : i)),
     );
   }
   function removeItem(id) {
@@ -68,7 +64,7 @@ export function POS({
   const taxRate = Number(settings.taxRate) || 0;
   const tax = round2(subtotal * (taxRate / 100));
   const total = round2(subtotal + tax);
-  async function checkout() {
+  function checkout() {
     if (cart.length === 0) return;
     // reduce stock
     setProducts((prev) =>
@@ -81,8 +77,8 @@ export function POS({
       customerId === "walkin"
         ? { id: "walkin", name: "Walk-in Customer" }
         : customers.find((c) => c.id === Number(customerId));
-    const invoice = await nextSeq(salesOrders, "invoice", "INV-", 2461);
-    const soId = await nextSeq(salesOrders, "id", "SO-", 1042);
+    const invoice = nextSeqId(salesOrders, "invoice", "INV-", 2461);
+    const soId = nextSeqId(salesOrders, "id", "SO-", 1042);
     const date = todayISO();
     const newOrder = {
       id: soId,
@@ -117,9 +113,9 @@ export function POS({
     );
     const additions = [
       {
-        id: await nextSeq(ledger, "id", "TXN-", 8821),
+        id: nextTxnId(ledger),
         date,
-        desc: `POS sale \u2014 ${invoice} (${customer.name})`,
+        desc: `POS sale — ${invoice} (${customer.name})`,
         type: "Income",
         category: "Sales",
         amount: round2(total),
@@ -130,9 +126,9 @@ export function POS({
     ];
     if (cogsAmount > 0) {
       additions.push({
-        id: await nextSeq([...ledger, ...additions], "id", "TXN-", 8821),
+        id: nextTxnId([...ledger, ...additions]),
         date,
-        desc: `Cost of goods sold \u2014 ${invoice}`,
+        desc: `Cost of goods sold — ${invoice}`,
         type: "Expense",
         category: "Cost of Goods Sold",
         amount: cogsAmount,
@@ -229,7 +225,7 @@ export function POS({
           {cart.length === 0 && (
             <div className={`text-center py-10 text-sm ${subText}`}>
               <ShoppingCart size={28} className="mx-auto mb-2 opacity-40" />
-              {"Cart is empty \u2014 tap a product to add it."}
+              {"Cart is empty — tap a product to add it."}
             </div>
           )}
           {cart.map((i) => (
@@ -241,7 +237,7 @@ export function POS({
                 <p className="text-sm font-medium truncate">{i.name}</p>
                 <p className={`text-xs ${subText}`}>
                   {money(i.price)}
-                  {" \u00D7 "}
+                  {" × "}
                   {i.qty}
                 </p>
               </div>
@@ -302,7 +298,7 @@ export function POS({
           className="mt-4 w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md shadow-blue-900/20 transition-colors disabled:opacity-40"
           disabled={cart.length === 0}
         >
-          {"Complete Sale \u2014 "}
+          {"Complete Sale — "}
           {money(total)}
         </button>
       </div>

@@ -78,7 +78,6 @@ export function MiniCalendar({
   onDayClick,
   dark,
   subText,
-  cardBg,
 }) {
   const first = new Date(year, month, 1);
   const startWeekday = first.getDay();
@@ -179,6 +178,16 @@ export function Badge({ tone, children }) {
     <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${tones[tone]}`}>{children}</span>
   );
 }
+// A headline figure: small label, large value, optional note underneath.
+export function StatCard({ label, value, valueClass = "", cardBg, subText, children }) {
+  return (
+    <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
+      <p className={`text-xs ${subText}`}>{label}</p>
+      <p className={`text-xl font-bold mt-1 ${valueClass}`}>{value}</p>
+      {children}
+    </div>
+  );
+}
 export function Toggle({ on, onClick }) {
   return (
     <button
@@ -223,12 +232,11 @@ export function Field({ label, subText, children }) {
     </div>
   );
 }
-export function FileUpload({ label, value, onChange, dark, subText, inputBg }) {
+export function FileUpload({ label, value, onChange, dark, subText }) {
   const inputRef = useRef(null);
   const [error, setError] = useState("");
   function handleFile(e) {
-    var _a;
-    const file = (_a = e.target.files) === null || _a === void 0 ? void 0 : _a[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 4.5 * 1024 * 1024) {
       setError("File is too large — please choose a file under 4.5MB.");
@@ -245,10 +253,7 @@ export function FileUpload({ label, value, onChange, dark, subText, inputBg }) {
       <div className="mt-1.5 flex items-center gap-2 flex-wrap">
         <button
           type="button"
-          onClick={() => {
-            var _a;
-            return (_a = inputRef.current) === null || _a === void 0 ? void 0 : _a.click();
-          }}
+          onClick={() => inputRef.current?.click()}
           className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-colors ${dark ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
         >
           <Upload size={14} /> {value ? "Replace file" : "Upload slip / receipt"}
@@ -270,7 +275,7 @@ export function FileUpload({ label, value, onChange, dark, subText, inputBg }) {
   );
 }
 export function AttachmentLink({ attachment, subText }) {
-  if (!attachment) return <span className={`text-xs ${subText}`}>{"\u2014"}</span>;
+  if (!attachment) return <span className={`text-xs ${subText}`}>{"—"}</span>;
   return (
     <a
       href={attachment.dataUrl}

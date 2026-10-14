@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Field, Modal, inputCls } from "@/components/learnex/ui";
+import { Badge, Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import { Building2, Phone, Plus, Save, Search, Trash2 } from "@/components/learnex/icons";
 import { fmtDate, money, nextNumId } from "@/lib/learnex/utils";
 
@@ -101,14 +101,14 @@ export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
         </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Suppliers</p>
-          <p className="text-xl font-bold mt-1">{suppliers.length}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Active</p>
-          <p className="text-xl font-bold mt-1 text-emerald-600">{active}</p>
-        </div>
+        <StatCard label="Total Suppliers" value={suppliers.length} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label="Active"
+          value={active}
+          valueClass="text-emerald-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
         <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm col-span-2`}>
           <p className={`text-xs ${subText}`}>Total Purchased (YTD)</p>
           <p className="text-xl font-bold mt-1">{money(totalPurchased)}</p>
