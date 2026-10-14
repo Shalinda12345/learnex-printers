@@ -394,49 +394,47 @@ export function RawMaterials({
             </thead>
             <tbody>
               {filtered.map((m) => (
-                  <tr
-                    key={m.id}
-                    className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors`}
-                  >
-                    <td className="py-3 px-5 font-medium">{m.name}</td>
-                    <td className={`py-3 px-2 ${subText}`}>{m.category}</td>
-                    <td className={`py-3 px-2 ${subText}`}>{m.supplier || "\u2014"}</td>
-                    <td className={`py-3 px-2 ${subText}`}>{m.unit}</td>
-                    <td className="py-3 px-2">{m.purchaseQty}</td>
-                    <td className="py-3 px-2 font-medium">{m.availableQty}</td>
-                    <td className="py-3 px-2">
-                      {money(m.costPrice)}
-                      {m.lastPurchaseCost !== undefined &&
-                      round2(m.lastPurchaseCost) !== round2(m.costPrice) ? (
-                        <p
-                          className={`text-xs ${subText}`}
-                        >{`last bought at ${money(m.lastPurchaseCost)}`}</p>
-                      ) : null}
-                    </td>
-                    <td className="py-3 px-2 font-medium">
-                      {money(round2(numVal(m.costPrice, 0) * numVal(m.availableQty, 0)))}
-                    </td>
-                    <td className={`py-3 px-2 ${subText}`}>{m.batchNumber || "\u2014"}</td>
-                    <td className="py-3 px-5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => {
-                            setEditing(m);
-                            setModalOpen(true);
-                          }}
-                          className={`w-7 h-7 rounded-lg flex items-center justify-center ${dark ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-500"}`}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => deleteMaterial(m)}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                <tr
+                  key={m.id}
+                  className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors`}
+                >
+                  <td className="py-3 px-5 font-medium">{m.name}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{m.category}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{m.supplier || "\u2014"}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{m.unit}</td>
+                  <td className="py-3 px-2">{m.purchaseQty}</td>
+                  <td className="py-3 px-2 font-medium">{m.availableQty}</td>
+                  <td className="py-3 px-2">
+                    {money(m.costPrice)}
+                    {m.lastPurchaseCost !== undefined &&
+                    round2(m.lastPurchaseCost) !== round2(m.costPrice) ? (
+                      <p className={`text-xs ${subText}`}>{`last bought at ${money(m.lastPurchaseCost)}`}</p>
+                    ) : null}
+                  </td>
+                  <td className="py-3 px-2 font-medium">
+                    {money(round2(numVal(m.costPrice, 0) * numVal(m.availableQty, 0)))}
+                  </td>
+                  <td className={`py-3 px-2 ${subText}`}>{m.batchNumber || "\u2014"}</td>
+                  <td className="py-3 px-5">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => {
+                          setEditing(m);
+                          setModalOpen(true);
+                        }}
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center ${dark ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-500"}`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => deleteMaterial(m)}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
