@@ -144,7 +144,7 @@ export default function BootGate() {
       <GateShell>
         <h2 style={headingStyle}>Can&apos;t reach the database</h2>
         <p style={bodyStyle}>
-          LEARNEX ERP couldn&apos;t load your data. Check that PostgreSQL is running and that the app&apos;s
+          LEARNEX ERP couldn&apos;t load your data. Check that MySQL is running and that the app&apos;s
           DATABASE_URL is correct, then try again.
         </p>
         <p style={errorStyle}>{phase.error}</p>

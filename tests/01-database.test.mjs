@@ -1,13 +1,13 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync, execFileSync } from "node:child_process";
-import pg from "pg";
+import mysql from "mysql2/promise";
 import { DATABASE_URL, pool, rows, one, log } from "./helpers.mjs";
 
 after(() => pool.end());
 
 test("DB-1 tests run on the separate test database, not the real one", async () => {
-  const { db } = await one("SELECT current_database() AS db");
+  const { db } = await one("SELECT DATABASE() AS db");
   log("connected to database:", db);
   assert.match(db, /_test$/);
 });
@@ -23,12 +23,17 @@ test("DB-2 `npm run db:setup` is safe to re-run (applies nothing twice)", () => 
 });
 
 test("DB-3 every module table, child table and view exists", async () => {
-  const tables = (await rows(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`)).map(
-    (r) => r.tablename,
+  const objects = await rows(
+    `SELECT table_name AS name, table_type AS type FROM information_schema.tables WHERE table_schema = DATABASE()`,
   );
-  const views = (await rows(`SELECT viewname FROM pg_views WHERE schemaname = 'public' ORDER BY 1`)).map(
-    (r) => r.viewname,
-  );
+  const tables = objects
+    .filter((o) => o.type === "BASE TABLE")
+    .map((o) => o.name)
+    .sort();
+  const views = objects
+    .filter((o) => o.type === "VIEW")
+    .map((o) => o.name)
+    .sort();
   log(`${tables.length} tables:`, tables.join(", "));
   log(`${views.length} views:`, views.join(", "));
   assert.deepEqual(tables, [
@@ -64,23 +69,24 @@ test("DB-3 every module table, child table and view exists", async () => {
 
 test("DB-4 child tables cascade-delete with their parent record", async () => {
   const fks = await rows(`
-    SELECT conrelid::regclass::text AS child, confrelid::regclass::text AS parent, confdeltype
-    FROM pg_constraint WHERE contype = 'f' AND conrelid::regclass::text NOT LIKE 'auth\_%' AND conrelid::regclass::text <> 'audit_log' ORDER BY 1`);
-  fks.forEach((f) =>
-    log(`${f.child} -> ${f.parent} (on delete ${f.confdeltype === "c" ? "cascade" : f.confdeltype})`),
-  );
+    SELECT table_name AS child, referenced_table_name AS parent, delete_rule AS rule
+    FROM information_schema.referential_constraints
+    WHERE constraint_schema = DATABASE() AND table_name NOT LIKE 'auth\\_%' AND table_name <> 'audit_log'
+    ORDER BY table_name`);
+  fks.forEach((f) => log(`${f.child} -> ${f.parent} (on delete ${f.rule.toLowerCase()})`));
   assert.equal(fks.length, 5);
-  assert.ok(fks.every((f) => f.confdeltype === "c"));
+  assert.ok(fks.every((f) => f.rule === "CASCADE"));
 });
 
-const ON_DELETE = { a: "no action", r: "restrict", c: "cascade", n: "set null", d: "set default" };
 test("DB-9 account tables are linked safely (sessions/roles go with the user, roles in use can't vanish, the log keeps history)", async () => {
   const fks = await rows(`
-    SELECT conrelid::regclass::text AS child, a.attname AS col, confrelid::regclass::text AS parent, confdeltype
-    FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
-    WHERE contype = 'f' AND (conrelid::regclass::text LIKE 'auth\_%' OR conrelid::regclass::text = 'audit_log')
-    ORDER BY 1, 2`);
-  const got = Object.fromEntries(fks.map((f) => [`${f.child}.${f.col}`, ON_DELETE[f.confdeltype]]));
+    SELECT rc.table_name AS child, k.column_name AS col, rc.delete_rule AS rule
+    FROM information_schema.referential_constraints rc
+    JOIN information_schema.key_column_usage k
+      ON k.constraint_schema = rc.constraint_schema AND k.table_name = rc.table_name
+     AND k.constraint_name = rc.constraint_name
+    WHERE rc.constraint_schema = DATABASE() AND (rc.table_name LIKE 'auth\\_%' OR rc.table_name = 'audit_log')`);
+  const got = Object.fromEntries(fks.map((f) => [`${f.child}.${f.col}`, f.rule.toLowerCase()]));
   Object.entries(got).forEach(([k, v]) => log(`${k} -> on delete ${v}`));
   assert.deepEqual(got, {
     "audit_log.user_id": "set null",
@@ -94,28 +100,76 @@ test("DB-9 account tables are linked safely (sessions/roles go with the user, ro
 });
 
 test("DB-10 usernames and emails are unique regardless of upper/lower case", async () => {
-  const idx = await rows(
-    `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'auth_users' AND indexdef LIKE '%UNIQUE%lower%'`,
-  );
-  idx.forEach((i) => log(i.indexdef));
-  assert.equal(idx.length, 2);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction(); // rolled back below: nothing is kept
+    const add = (username, email) =>
+      conn
+        .query(`INSERT INTO auth_users (username, name, email, password_hash) VALUES (?, 'x', ?, 'x')`, [
+          username,
+          email,
+        ])
+        .then(
+          () => "accepted",
+          (e) => e.code,
+        );
+    const results = {
+      "CaseTest / Case@Test.lk": await add("CaseTest", "Case@Test.lk"),
+      "CASETEST (same username)": await add("CASETEST", null),
+      "other / case@TEST.lk (same email)": await add("other", "case@TEST.lk"),
+      "noemail1 (no email)": await add("noemail1", null),
+      "noemail2 (no email)": await add("noemail2", null),
+    };
+    Object.entries(results).forEach(([k, v]) => log(`${k} -> ${v}`));
+    assert.deepEqual(Object.values(results), [
+      "accepted",
+      "ER_DUP_ENTRY",
+      "ER_DUP_ENTRY",
+      "accepted",
+      "accepted",
+    ]);
+  } finally {
+    await conn.rollback();
+    conn.release();
+  }
 });
 
-test("DB-5 the app logs in with its own non-superuser role that owns the tables", async () => {
-  const me = await one(`SELECT current_user AS u, rolsuper FROM pg_roles WHERE rolname = current_user`);
-  const owners = await rows(`SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname = 'public'`);
+test("DB-5 the app logs in with its own account, which can only reach the app's databases", async () => {
+  const { me, db } = await one(`SELECT CURRENT_USER() AS me, DATABASE() AS db`);
+  const at = me.lastIndexOf("@");
+  const grantee = `'${me.slice(0, at)}'@'${me.slice(at + 1)}'`;
+  const serverWide = (
+    await rows(`SELECT privilege_type AS p FROM information_schema.user_privileges WHERE grantee = ?`, [
+      grantee,
+    ])
+  ).map((r) => r.p);
+  // Granted database names escape the `_` wildcard ("hashil\_test").
+  const databases = [
+    ...new Set(
+      (
+        await rows(`SELECT table_schema AS s FROM information_schema.schema_privileges WHERE grantee = ?`, [
+          grantee,
+        ])
+      ).map((r) => r.s.replace(/\\(.)/g, "$1")),
+    ),
+  ];
   log(
-    `app role: ${me.u} (superuser: ${me.rolsuper}); table owner(s): ${owners.map((o) => o.tableowner).join(", ")}`,
+    `app login: ${me}; server-wide privileges: ${serverWide.join(", ")}; databases: ${databases.join(", ")}`,
   );
-  assert.equal(me.rolsuper, false);
+  assert.notEqual(me.slice(0, at), "root");
+  assert.deepEqual(serverWide, ["USAGE"]);
+  // The same login also uses the real database ("hashil" next to "hashil_test").
+  const appDatabases = [db, db.replace(/_test$/, "")];
+  assert.ok(databases.includes(db));
   assert.deepEqual(
-    owners.map((o) => o.tableowner),
-    [me.u],
+    databases.filter((d) => !appDatabases.includes(d)),
+    [],
+    "no other databases",
   );
 });
 
 test("DB-6 the migration is recorded in schema_migrations", async () => {
-  const applied = await rows(`SELECT name, applied_at FROM schema_migrations`);
+  const applied = await rows(`SELECT name, applied_at FROM schema_migrations ORDER BY name`);
   applied.forEach((m) => log(m.name, "applied", m.applied_at.toISOString()));
   assert.deepEqual(
     applied.map((m) => m.name),
@@ -123,27 +177,41 @@ test("DB-6 the migration is recorded in schema_migrations", async () => {
   );
 });
 
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1"];
+const PASSWORD_PLUGINS = ["", "mysql_native_password", "caching_sha2_password", "sha256_password"];
 test(
-  "DB-7 PostgreSQL only accepts network logins from this PC",
-  { skip: !process.env.POSTGRES_ADMIN_URL && "POSTGRES_ADMIN_URL not set" },
+  "DB-7 MySQL only accepts logins from this PC, and every login needs a password",
+  { skip: !process.env.MYSQL_ADMIN_URL && "MYSQL_ADMIN_URL not set" },
   async () => {
-    const admin = new pg.Client({ connectionString: process.env.POSTGRES_ADMIN_URL });
-    await admin.connect();
+    const adminUrl = new URL(process.env.MYSQL_ADMIN_URL);
+    adminUrl.pathname = "/";
+    const admin = await mysql.createConnection(adminUrl.toString());
     try {
-      const { rows: listen } = await admin.query("SHOW listen_addresses");
-      const { rows: rules } = await admin.query(
-        `SELECT type, database, user_name, address, auth_method FROM pg_hba_file_rules WHERE error IS NULL`,
+      const [[net]] = await admin.query("SELECT @@bind_address AS bind, @@skip_networking AS skip");
+      const [accounts] = await admin.query("SELECT * FROM mysql.user");
+      log(`bind_address = ${net.bind ?? "(all interfaces)"}; skip_networking = ${net.skip}`);
+      const logins = accounts
+        // MariaDB lists roles here; MySQL's built-in system accounts are locked.
+        .filter((a) => a.is_role !== "Y" && a.account_locked !== "Y")
+        .filter((a) => !/^(mariadb\.sys|mysql\.(sys|session|infoschema))$/.test(a.User));
+      logins.forEach((a) =>
+        log(
+          `account ${a.User}@${a.Host} (${a.plugin || "default"}${a.authentication_string ? "" : ", no password"})`,
+        ),
       );
-      log("listen_addresses =", listen[0].listen_addresses);
-      rules.forEach((r) =>
-        log(`pg_hba: ${r.type} ${r.database} ${r.user_name} ${r.address ?? ""} ${r.auth_method}`),
+      const localOnly =
+        !!net.skip || (!!net.bind && net.bind.split(",").every((b) => LOCAL_HOSTS.includes(b.trim())));
+      assert.ok(localOnly, "the server must only listen on this PC (bind-address=127.0.0.1)");
+      assert.deepEqual(
+        logins.filter((a) => !LOCAL_HOSTS.includes(a.Host)).map((a) => `${a.User}@${a.Host}`),
+        [],
+        "no account may log in from other machines",
       );
-      const remote = rules.filter(
-        (r) => r.type.startsWith("host") && !["127.0.0.1", "::1"].includes(r.address),
-      );
-      assert.deepEqual(remote, [], "no pg_hba rule may allow other machines");
-      assert.ok(
-        rules.every((r) => r.auth_method !== "trust"),
+      assert.deepEqual(
+        logins
+          .filter((a) => !a.authentication_string && PASSWORD_PLUGINS.includes(a.plugin))
+          .map((a) => `${a.User}@${a.Host}`),
+        [],
         "no passwordless logins",
       );
     } finally {
@@ -153,14 +221,20 @@ test(
 );
 
 test(
-  "DB-8 PostgreSQL runs as a Windows service that starts automatically",
+  "DB-8 MySQL runs as a Windows service that starts automatically",
   { skip: process.platform !== "win32" && "Windows only" },
   () => {
-    const state = execFileSync("sc", ["query", "postgresql-x64-17"], { encoding: "utf8" });
-    const config = execFileSync("sc", ["qc", "postgresql-x64-17"], { encoding: "utf8" });
-    const running = /STATE\s+:\s+4\s+RUNNING/.test(state);
-    const auto = /START_TYPE\s+:\s+2\s+AUTO_START/.test(config);
-    log(`postgresql-x64-17: running=${running}, auto-start=${auto}`);
-    assert.ok(running && auto);
+    const names = execFileSync("sc", ["query", "type=", "service", "state=", "all"], { encoding: "utf8" })
+      .split("\n")
+      .map((l) => /^SERVICE_NAME:\s*(.+)$/.exec(l.trim())?.[1])
+      .filter((name) => name && /mysql|mariadb/i.test(name));
+    const services = names.map((name) => ({
+      name,
+      running: /STATE\s+:\s+4\s+RUNNING/.test(execFileSync("sc", ["query", name], { encoding: "utf8" })),
+      auto: /START_TYPE\s+:\s+2\s+AUTO_START/.test(execFileSync("sc", ["qc", name], { encoding: "utf8" })),
+    }));
+    if (!services.length) log("no MySQL / MariaDB Windows service is installed");
+    services.forEach((s) => log(`${s.name}: running=${s.running}, auto-start=${s.auto}`));
+    assert.ok(services.some((s) => s.running && s.auto));
   },
 );

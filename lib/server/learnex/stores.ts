@@ -6,11 +6,12 @@ import "server-only";
    The app keeps every module as a plain JS value — a list of records, or
    one object for settings. Each record property listed here gets its own
    column; anything else (or a value whose type doesn't fit the column)
-   goes into the row's `extra` jsonb, so a save → load round trip always
+   goes into the row's `extra` JSON column, so a save → load round trip always
    gives back what the app stored.
 ===================================================================== */
 
-export type ColumnType = "text" | "bigint" | "integer" | "numeric" | "boolean" | "date" | "jsonb" | "text[]";
+// "text[]" is a list of texts (or nulls), stored as a JSON array.
+export type ColumnType = "text" | "bigint" | "integer" | "numeric" | "boolean" | "date" | "json" | "text[]";
 
 export interface Column {
   prop: string; // property name in the app
@@ -135,7 +136,7 @@ export const STORES: StoreDef[] = [
       c("payment", "text"),
       c("date", "date"),
       c("channel", "text"),
-      c("attachment", "jsonb"),
+      c("attachment", "json"),
       c("amountPaid", "numeric"),
       {
         child: {
@@ -171,7 +172,7 @@ export const STORES: StoreDef[] = [
       },
       c("total", "numeric"),
       c("date", "date"),
-      c("attachment", "jsonb"),
+      c("attachment", "json"),
       c("paymentStatus", "text"),
       c("amountPaid", "numeric"),
       c("cashAccount", "text"),
@@ -240,7 +241,7 @@ export const STORES: StoreDef[] = [
             c("unit", "text"),
             c("taken", "numeric"),
             c("returned", "numeric"),
-            c("sales", "jsonb"),
+            c("sales", "json"),
             c("sold", "numeric"),
             c("saleAmount", "numeric"),
             c("avgPrice", "numeric"),
@@ -267,7 +268,7 @@ export const STORES: StoreDef[] = [
           columns: [
             c("shop", "text"),
             c("note", "text"),
-            c("items", "jsonb"),
+            c("items", "json"),
             c("qty", "numeric"),
             c("total", "numeric"),
           ],
@@ -293,7 +294,7 @@ export const STORES: StoreDef[] = [
       c("account", "text"),
       c("kind", "text"),
       c("cash", "boolean"),
-      c("attachment", "jsonb"),
+      c("attachment", "json"),
     ],
   },
   {

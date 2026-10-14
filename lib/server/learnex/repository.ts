@@ -1,5 +1,5 @@
 import "server-only";
-import type { PoolClient } from "pg";
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool, withTransaction } from "@/lib/server/db";
 import {
   STORES,
@@ -46,55 +46,99 @@ export interface StoreChange {
   value?: unknown;
 }
 
-const SQL_TYPE: Record<ColumnType, string> = {
-  text: "text",
-  bigint: "bigint",
-  integer: "integer",
-  numeric: "numeric",
-  boolean: "boolean",
-  date: "date",
-  jsonb: "jsonb",
-  "text[]": "text[]",
-};
-const q = (identifier: string) => `"${identifier}"`;
+// Column limits (see db/migrations): text ids are VARCHAR(191), other text is
+// TEXT (64 KB), amounts are DECIMAL(65,30).
+const MAX_ID_LENGTH = 191;
+const MAX_TEXT_BYTES = 65535;
+const DECIMAL_INT_DIGITS = 35;
+const DECIMAL_FRAC_DIGITS = 30;
+
+// Statements are kept well under MySQL's max_allowed_packet (only 1 MB on
+// some installs); a single bigger record (e.g. a photo attachment) still
+// goes in one statement of its own.
+const BATCH_BYTES = 256 * 1024;
+const BATCH_IDS = 1000;
+
+const q = (identifier: string) => `\`${identifier}\``;
 const isPlainObject = (v: unknown): v is Rec => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function isIsoDate(s: string) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return false;
+  if (!m || +m[1] < 1000) return false; // MySQL dates start at year 1000
   const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
   return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
+}
+
+// A number as exact decimal text: "1e-7" would reach MySQL as an approximate
+// (floating-point) literal, so exponents are spelled out ("0.0000001").
+function decimalText(n: number) {
+  const s = String(n);
+  const m = /^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(s);
+  if (!m) return s;
+  const [, sign, lead, rest = "", exp] = m;
+  const digits = lead + rest;
+  const point = 1 + Number(exp); // digits before the decimal point
+  if (point <= 0) return `${sign}0.${"0".repeat(-point)}${digits}`;
+  if (point >= digits.length) return sign + digits + "0".repeat(point - digits.length);
+  return `${sign}${digits.slice(0, point)}.${digits.slice(point)}`;
+}
+
+// Whether DECIMAL(65,30) holds this number exactly. MySQL silently rounds
+// extra decimal places (1e-31 would be stored as 0).
+function fitsDecimal(n: number) {
+  if (!Number.isFinite(n)) return false;
+  const [int, frac = ""] = decimalText(Math.abs(n)).split(".");
+  return int.length <= DECIMAL_INT_DIGITS && frac.length <= DECIMAL_FRAC_DIGITS;
 }
 
 // Whether a JS value can be stored in a column of this type without changing it.
 function fits(type: ColumnType, v: unknown): boolean {
   switch (type) {
     case "text":
-      return typeof v === "string";
+      return typeof v === "string" && Buffer.byteLength(v) <= MAX_TEXT_BYTES;
     case "bigint":
       return Number.isSafeInteger(v);
     case "integer":
       return Number.isInteger(v) && (v as number) >= -2147483648 && (v as number) <= 2147483647;
     case "numeric":
-      return typeof v === "number" && Number.isFinite(v);
+      return typeof v === "number" && fitsDecimal(v);
     case "boolean":
       return typeof v === "boolean";
     case "date":
       return typeof v === "string" && isIsoDate(v);
-    case "jsonb":
+    case "json":
       return true;
     case "text[]":
       return Array.isArray(v) && v.every((x) => typeof x === "string" || x === null);
   }
 }
 
-// pg returns numeric/bigint as strings (they can exceed JS precision in
-// general); the app only ever stores JS numbers in them, so convert back.
+// A column value as sent to MySQL: JSON columns take JSON text, decimals
+// exact decimal text.
+function toDb(type: ColumnType, v: unknown) {
+  if (v === undefined || v === null) return null;
+  if (type === "numeric") return decimalText(v as number);
+  if (type === "json" || type === "text[]") return JSON.stringify(v);
+  return v;
+}
+
+// mysql2 returns DECIMAL and JSON columns as text; the app only ever stores
+// JS numbers and JSON values in them, so convert back. (BOOLEAN and DATE
+// columns are converted by the pool, see lib/server/db.ts.)
 function fromDb(type: ColumnType, v: unknown) {
-  return type === "numeric" || type === "bigint" ? Number(v) : v;
+  if (v === null || v === undefined) return v;
+  if (type === "numeric" || type === "bigint") return Number(v);
+  if (type === "json" || type === "text[]") return JSON.parse(v as string);
+  return v;
 }
 
 const isColumn = (f: Field): f is Column => !("child" in f);
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 /* ------------------------------------------------------------------ */
 /* record <-> row                                                      */
@@ -132,7 +176,7 @@ function splitRecord(obj: Rec, fields: Field[]) {
 }
 
 function joinRecord(row: Rec, fields: Field[], children: Map<string, Rec[]>) {
-  const extra = (row.extra as Rec) || {};
+  const extra = (fromDb("json", row.extra) as Rec) || {};
   const obj: Rec = {};
   for (const f of fields) {
     if (!isColumn(f)) {
@@ -154,35 +198,60 @@ function joinRecord(row: Rec, fields: Field[], children: Map<string, Rec[]>) {
 
 type SqlColumn = { col: string; type: ColumnType };
 const POSITION: SqlColumn = { col: "position", type: "integer" };
-const EXTRA: SqlColumn = { col: "extra", type: "jsonb" };
+const EXTRA: SqlColumn = { col: "extra", type: "json" };
 
-// Bulk insert (or upsert on id) of many rows in one statement.
-async function insertRows(client: PoolClient, table: string, cols: SqlColumn[], rows: Rec[], upsert = false) {
+// Bulk insert (or upsert on id) of many rows, a batch per statement.
+async function insertRows(
+  conn: PoolConnection,
+  table: string,
+  cols: SqlColumn[],
+  rows: Rec[],
+  upsert = false,
+) {
   if (!rows.length) return;
-  const list = cols.map((c) => q(c.col)).join(", ");
-  const defs = cols.map((c) => `${q(c.col)} ${SQL_TYPE[c.type]}`).join(", ");
-  let sql = `INSERT INTO ${q(table)} (${list}) SELECT ${list} FROM jsonb_to_recordset($1::jsonb) AS x(${defs})`;
+  let sql = `INSERT INTO ${q(table)} (${cols.map((c) => q(c.col)).join(", ")}) VALUES ?`;
   if (upsert) {
-    const sets = cols.filter((c) => c.col !== "id").map((c) => `${q(c.col)} = EXCLUDED.${q(c.col)}`);
-    sql += ` ON CONFLICT ("id") DO UPDATE SET ${sets.join(", ")}, "updated_at" = now()`;
+    const sets = cols.filter((c) => c.col !== "id").map((c) => `${q(c.col)} = VALUES(${q(c.col)})`);
+    sql += ` ON DUPLICATE KEY UPDATE ${sets.join(", ")}, \`updated_at\` = NOW(6)`;
   }
-  await client.query(sql, [JSON.stringify(rows)]);
+  let batch: unknown[][] = [];
+  let size = 0;
+  for (const row of rows) {
+    const values = cols.map((c) => toDb(c.type, row[c.col]));
+    const rowSize = values.reduce<number>((n, v) => n + (typeof v === "string" ? v.length : 8), 0);
+    if (batch.length && size + rowSize > BATCH_BYTES) {
+      await conn.query(sql, [batch]);
+      batch = [];
+      size = 0;
+    }
+    batch.push(values);
+    size += rowSize;
+  }
+  await conn.query(sql, [batch]);
 }
 
 function tableColumns(fields: Field[]): SqlColumn[] {
   return [...fields.filter(isColumn).map(({ col, type }) => ({ col, type })), POSITION, EXTRA];
 }
 
-async function markInitialized(client: PoolClient, store: string) {
-  await client.query(`INSERT INTO store_state (store) VALUES ($1) ON CONFLICT (store) DO NOTHING`, [store]);
+async function markInitialized(conn: PoolConnection, store: string) {
+  await conn.query(`INSERT INTO store_state (store) VALUES (?) ON DUPLICATE KEY UPDATE store = store`, [
+    store,
+  ]);
 }
 
 /* ------------------------------------------------------------------ */
 /* list modules (records with ids)                                      */
 /* ------------------------------------------------------------------ */
 
+// Text ids must fit their VARCHAR(191) column, and can't end with a space:
+// MySQL ignores trailing spaces when comparing, so "A " would overwrite "A".
 function checkId(def: ListStore, id: unknown): string | number {
-  if (def.idType === "bigint" ? Number.isSafeInteger(id) : typeof id === "string" && id !== "") {
+  if (
+    def.idType === "bigint"
+      ? Number.isSafeInteger(id)
+      : typeof id === "string" && id !== "" && id.length <= MAX_ID_LENGTH && !id.endsWith(" ")
+  ) {
     return id as string | number;
   }
   throw new BadRequestError(`${def.key}: a record has an invalid id ${JSON.stringify(id)}`);
@@ -198,7 +267,7 @@ function checkUnique(def: ListStore, ids: (string | number)[]) {
 }
 
 async function writeListRecords(
-  client: PoolClient,
+  conn: PoolConnection,
   def: ListStore,
   records: Rec[],
   position: Map<unknown, number>,
@@ -217,28 +286,41 @@ async function writeListRecords(
       childRows.set(child, out);
     }
   }
-  await insertRows(client, def.table, tableColumns(def.fields), rows, true);
+  await insertRows(conn, def.table, tableColumns(def.fields), rows, true);
 
   // Child lists are replaced as a whole for every saved record.
   const ids = records.map((r) => r.id);
   for (const f of def.fields) {
     if (isColumn(f)) continue;
     const child = f.child;
-    await client.query(
-      `DELETE FROM ${q(child.table)} WHERE ${q(child.parentKey)} = ANY($1::${def.idType}[])`,
-      [ids],
-    );
+    for (const batch of chunks(ids, BATCH_IDS)) {
+      await conn.query(`DELETE FROM ${q(child.table)} WHERE ${q(child.parentKey)} IN (?)`, [batch]);
+    }
     const cols: SqlColumn[] = [
       { col: child.parentKey, type: def.idType },
       { col: "line_no", type: "integer" },
       ...child.columns.map(({ col, type }) => ({ col, type })),
       EXTRA,
     ];
-    await insertRows(client, child.table, cols, childRows.get(child) || []);
+    await insertRows(conn, child.table, cols, childRows.get(child) || []);
   }
 }
 
-async function syncList(client: PoolClient, def: ListStore, change: StoreChange) {
+// Sets each record's position from the app's list order, touching only the
+// rows whose position changed.
+async function updatePositions(conn: PoolConnection, def: ListStore, order: (string | number)[]) {
+  for (let start = 0; start < order.length; start += BATCH_IDS) {
+    const batch = order.slice(start, start + BATCH_IDS);
+    const pairs = batch.map((_, i) => (i ? "SELECT ?, ?" : "SELECT ? AS id, ? AS ord")).join(" UNION ALL ");
+    await conn.query(
+      `UPDATE ${q(def.table)} t JOIN (${pairs}) o ON t.\`id\` = o.id
+       SET t.\`position\` = o.ord WHERE t.\`position\` <> o.ord`,
+      batch.flatMap((id, i) => [id, start + i + 1]),
+    );
+  }
+}
+
+async function syncList(conn: PoolConnection, def: ListStore, change: StoreChange) {
   const upserts = change.upserts ?? [];
   const deletes = change.deletes ?? [];
   if (!Array.isArray(upserts) || !upserts.every(isPlainObject))
@@ -255,32 +337,26 @@ async function syncList(client: PoolClient, def: ListStore, change: StoreChange)
   checkUnique(def, order);
   const position = new Map<unknown, number>(order.map((id, i) => [id, i + 1]));
 
-  if (change.replace) await client.query(`DELETE FROM ${q(def.table)}`);
+  if (change.replace) await conn.query(`DELETE FROM ${q(def.table)}`);
   const deleteIds = deletes.map((id) => checkId(def, id));
   let deleted = 0;
-  if (deleteIds.length) {
-    deleted = (
-      await client.query(`DELETE FROM ${q(def.table)} WHERE "id" = ANY($1::${def.idType}[])`, [deleteIds])
-    ).rowCount!;
+  for (const batch of chunks(deleteIds, BATCH_IDS)) {
+    const [res] = await conn.query<ResultSetHeader>(`DELETE FROM ${q(def.table)} WHERE \`id\` IN (?)`, [
+      batch,
+    ]);
+    deleted += res.affectedRows;
   }
-  const existing = upsertIds.length
-    ? (
-        await client.query(
-          `SELECT count(*)::int AS n FROM ${q(def.table)} WHERE "id" = ANY($1::${def.idType}[])`,
-          [upsertIds],
-        )
-      ).rows[0].n
-    : 0;
-  await writeListRecords(client, def, upserts, position);
-  if (order.length && !change.replace) {
-    await client.query(
-      `UPDATE ${q(def.table)} t SET "position" = o.ord::integer
-       FROM unnest($1::${def.idType}[]) WITH ORDINALITY AS o(id, ord)
-       WHERE t."id" = o.id AND t."position" IS DISTINCT FROM o.ord::integer`,
-      [order],
+  let existing = 0;
+  for (const batch of chunks(upsertIds, BATCH_IDS)) {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT count(*) AS n FROM ${q(def.table)} WHERE \`id\` IN (?)`,
+      [batch],
     );
+    existing += Number(rows[0].n);
   }
-  await markInitialized(client, def.key);
+  await writeListRecords(conn, def, upserts, position);
+  if (order.length && !change.replace) await updatePositions(conn, def, order);
+  await markInitialized(conn, def.key);
   const summary: ChangeSummary = {
     store: def.key,
     created: upsertIds.length - existing,
@@ -293,13 +369,17 @@ async function syncList(client: PoolClient, def: ListStore, change: StoreChange)
 }
 
 async function loadList(def: ListStore) {
-  const { rows } = await pool.query(`SELECT * FROM ${q(def.table)} ORDER BY "position", "id"`);
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT * FROM ${q(def.table)} ORDER BY \`position\`, \`id\``,
+  );
   const childrenById = new Map<unknown, Map<string, Rec[]>>();
   for (const f of def.fields) {
     if (isColumn(f)) continue;
     const child = f.child;
-    const res = await pool.query(`SELECT * FROM ${q(child.table)} ORDER BY ${q(child.parentKey)}, "line_no"`);
-    for (const r of res.rows) {
+    const [childRows] = await pool.query<RowDataPacket[]>(
+      `SELECT * FROM ${q(child.table)} ORDER BY ${q(child.parentKey)}, \`line_no\``,
+    );
+    for (const r of childRows) {
       const parentId = fromDb(def.idType, r[child.parentKey]);
       const byProp = childrenById.get(parentId) || new Map<string, Rec[]>();
       const list = byProp.get(child.prop) || [];
@@ -315,7 +395,7 @@ async function loadList(def: ListStore) {
 /* settings (one object) and users (small list without ids)            */
 /* ------------------------------------------------------------------ */
 
-async function syncSingle(client: PoolClient, def: SingleStore, value: unknown) {
+async function syncSingle(conn: PoolConnection, def: SingleStore, value: unknown) {
   if (!isPlainObject(value)) throw new BadRequestError(`${def.key}: value must be an object`);
   const { row, extra } = splitRecord(value, def.fields);
   const cols: SqlColumn[] = [
@@ -323,21 +403,21 @@ async function syncSingle(client: PoolClient, def: SingleStore, value: unknown) 
     ...def.fields.filter(isColumn).map(({ col, type }) => ({ col, type })),
     EXTRA,
   ];
-  await insertRows(client, def.table, cols, [{ ...row, id: 1, extra }], true);
-  await markInitialized(client, def.key);
+  await insertRows(conn, def.table, cols, [{ ...row, id: 1, extra }], true);
+  await markInitialized(conn, def.key);
   return { store: def.key, updated: 1 } as ChangeSummary;
 }
 
-async function syncReplace(client: PoolClient, def: ReplaceStore, value: unknown) {
+async function syncReplace(conn: PoolConnection, def: ReplaceStore, value: unknown) {
   if (!Array.isArray(value) || !value.every(isPlainObject))
     throw new BadRequestError(`${def.key}: value must be a list of records`);
-  await client.query(`DELETE FROM ${q(def.table)}`);
+  await conn.query(`DELETE FROM ${q(def.table)}`);
   const rows = value.map((rec, i) => {
     const { row, extra } = splitRecord(rec, def.fields);
     return { ...row, position: i + 1, extra };
   });
-  await insertRows(client, def.table, tableColumns(def.fields), rows);
-  await markInitialized(client, def.key);
+  await insertRows(conn, def.table, tableColumns(def.fields), rows);
+  await markInitialized(conn, def.key);
   return { store: def.key, replaced: true, created: rows.length } as ChangeSummary;
 }
 
@@ -345,13 +425,13 @@ async function syncReplace(client: PoolClient, def: ReplaceStore, value: unknown
 /* public API                                                           */
 /* ------------------------------------------------------------------ */
 
-async function applyChange(client: PoolClient, change: StoreChange): Promise<ChangeSummary> {
+async function applyChange(conn: PoolConnection, change: StoreChange): Promise<ChangeSummary> {
   if (!isPlainObject(change)) throw new BadRequestError("each change must be an object");
   const def = STORE_BY_KEY.get(change.store);
   if (!def) throw new BadRequestError(`unknown module ${JSON.stringify(change.store)}`);
-  if (def.kind === "list") return syncList(client, def, change);
-  if (def.kind === "single") return syncSingle(client, def, change.value);
-  return syncReplace(client, def, change.value);
+  if (def.kind === "list") return syncList(conn, def, change);
+  if (def.kind === "single") return syncSingle(conn, def, change.value);
+  return syncReplace(conn, def, change.value);
 }
 
 const ALL_ACCESS: AccessMap = Object.fromEntries(STORES.map((d) => [d.key, "write"]));
@@ -362,22 +442,24 @@ const ALL_ACCESS: AccessMap = Object.fromEntries(STORES.map((d) => [d.key, "writ
  * the user may load ("read") or also save ("write") — others are hidden.
  */
 export async function loadAll(access: AccessMap = ALL_ACCESS) {
-  const meta = await pool.query(`SELECT value FROM app_meta WHERE key = 'initialized'`);
-  const state = await pool.query(`SELECT store FROM store_state`);
-  const saved = new Set(state.rows.map((r) => r.store as string));
+  const initialized = await isInitialized();
+  const [state] = await pool.query<RowDataPacket[]>(`SELECT store FROM store_state`);
+  const saved = new Set(state.map((r) => r.store as string));
   const stores: Rec = {};
   for (const def of STORES) {
     if (!saved.has(def.key) || !access[def.key as StoreKey]) continue;
     if (def.kind === "list") stores[def.key] = await loadList(def);
     else if (def.kind === "single") {
-      const { rows } = await pool.query(`SELECT * FROM ${q(def.table)} WHERE "id" = 1`);
+      const [rows] = await pool.query<RowDataPacket[]>(`SELECT * FROM ${q(def.table)} WHERE \`id\` = 1`);
       if (rows.length) stores[def.key] = joinRecord(rows[0], def.fields, new Map());
     } else {
-      const { rows } = await pool.query(`SELECT * FROM ${q(def.table)} ORDER BY "position", "id"`);
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT * FROM ${q(def.table)} ORDER BY \`position\`, \`id\``,
+      );
       stores[def.key] = rows.map((r) => joinRecord(r, def.fields, new Map()));
     }
   }
-  return { initialized: meta.rowCount! > 0, stores, access };
+  return { initialized, stores, access };
 }
 
 function checkWritable(access: AccessMap, store: unknown) {
@@ -402,10 +484,10 @@ export async function saveChanges(
   if (!Array.isArray(changes) || !changes.length)
     throw new BadRequestError("changes must be a non-empty list");
   for (const change of changes) checkWritable(access, isPlainObject(change) ? change.store : undefined);
-  await withTransaction(async (client) => {
+  await withTransaction(async (conn) => {
     const summaries: ChangeSummary[] = [];
-    for (const change of changes) summaries.push(await applyChange(client, change as StoreChange));
-    await audit(actor, "data.save", summaries.map((s) => s.store).join(", "), { changes: summaries }, client);
+    for (const change of changes) summaries.push(await applyChange(conn, change as StoreChange));
+    await audit(actor, "data.save", summaries.map((s) => s.store).join(", "), { changes: summaries }, conn);
   });
 }
 
@@ -416,7 +498,7 @@ export async function saveChanges(
  */
 export async function importAll(stores: unknown, actor: Actor | null = null) {
   if (!isPlainObject(stores)) throw new BadRequestError("stores must be an object");
-  await withTransaction(async (client) => {
+  await withTransaction(async (conn) => {
     const imported: ChangeSummary[] = [];
     for (const def of STORES) {
       const value = stores[def.key];
@@ -424,26 +506,27 @@ export async function importAll(stores: unknown, actor: Actor | null = null) {
       if (def.kind === "list") {
         if (!Array.isArray(value)) throw new BadRequestError(`${def.key}: expected a list`);
         imported.push(
-          await syncList(client, def, {
+          await syncList(conn, def, {
             store: def.key,
             replace: true,
             upserts: value,
             order: value.map((r) => (r as Rec)?.id),
           }),
         );
-      } else if (def.kind === "single") imported.push(await syncSingle(client, def, value));
-      else imported.push(await syncReplace(client, def, value));
+      } else if (def.kind === "single") imported.push(await syncSingle(conn, def, value));
+      else imported.push(await syncReplace(conn, def, value));
     }
-    await client.query(
-      `INSERT INTO app_meta (key, value) VALUES ('initialized', to_jsonb(now()))
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    await conn.query(
+      `INSERT INTO app_meta (\`key\`, value) VALUES ('initialized', ?)
+       ON DUPLICATE KEY UPDATE value = VALUES(value), updated_at = NOW(6)`,
+      [JSON.stringify(new Date())],
     );
     await audit(
       actor,
       "data.import",
       null,
       { modules: imported.map(({ store, created }) => ({ store, records: created })) },
-      client,
+      conn,
     );
   });
 }
@@ -457,13 +540,15 @@ export async function resetAll(actor: Actor | null = null) {
       ...def.fields.flatMap((f) => (isColumn(f) ? [] : [f.child.table])),
     ]),
   ];
-  await withTransaction(async (client) => {
-    await client.query(`TRUNCATE ${tables.map(q).join(", ")} RESTART IDENTITY`);
-    await audit(actor, "data.reset", null, {}, client);
+  // DELETE rather than TRUNCATE: in MySQL, TRUNCATE can't run inside a
+  // transaction (or on a table other tables point to).
+  await withTransaction(async (conn) => {
+    for (const table of tables) await conn.query(`DELETE FROM ${q(table)}`);
+    await audit(actor, "data.reset", null, {}, conn);
   });
 }
 
 export async function isInitialized() {
-  const { rowCount } = await pool.query(`SELECT 1 FROM app_meta WHERE key = 'initialized'`);
-  return rowCount! > 0;
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT 1 FROM app_meta WHERE \`key\` = 'initialized'`);
+  return rows.length > 0;
 }

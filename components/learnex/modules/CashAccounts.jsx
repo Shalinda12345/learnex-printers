@@ -344,7 +344,11 @@ export function CashAccounts({
   }
   function saveAccount(data) {
     if (editing) {
-      setCashAccounts((prev) => prev.map((a) => (a.id === editing.id ? { ...a, ...data } : a)));
+      // Balances are always calculated from the ledger; drop any copy an
+      // earlier version stored on the account by mistake.
+      const calculated = ["inn", "out", "balance", "count"];
+      const clean = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !calculated.includes(k)));
+      setCashAccounts((prev) => prev.map((a) => (a.id === editing.id ? clean({ ...a, ...data }) : a)));
       setToast(`${data.name} updated.`);
     } else {
       const id = "ACC-" + Date.now().toString(36).toUpperCase();
@@ -578,7 +582,8 @@ export function CashAccounts({
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => {
-                          setEditing(a);
+                          // The stored account, not this row (which also carries calculated figures).
+                          setEditing(cashAccounts.find((x) => x.id === a.id));
                           setAccModal(true);
                         }}
                         className={`w-7 h-7 rounded-lg flex items-center justify-center ${dark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}

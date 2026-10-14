@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { PoolClient } from "pg";
-import { pool, withTransaction } from "@/lib/server/db";
+import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { pool, withLock, withTransaction } from "@/lib/server/db";
 import { audit } from "@/lib/server/audit";
 import {
   BadRequestError,
@@ -41,7 +41,7 @@ export function validateProfile(
   }
   if (!partial || input.email !== undefined) {
     const email = asText(input.email);
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))
       throw new BadRequestError("Enter a valid email address.");
     out.email = email || null;
   }
@@ -49,28 +49,31 @@ export function validateProfile(
 }
 
 export function uniqueViolation(e: unknown): HttpError | null {
-  const err = e as { code?: string; constraint?: string };
-  if (err.code !== "23505") return null;
-  if (err.constraint?.includes("email")) return new ConflictError("Another account already uses that email.");
-  if (err.constraint?.includes("username")) return new ConflictError("That username is already taken.");
-  if (err.constraint?.includes("roles_name"))
-    return new ConflictError("A role with that name already exists.");
+  const err = e as { errno?: number; sqlMessage?: string };
+  if (err.errno !== 1062) return null; // ER_DUP_ENTRY
+  // "Duplicate entry 'x' for key 'auth_users_username_key'" (MySQL 8 adds the table: 'auth_users.auth_users_...')
+  const key = /for key '([^']*)'$/.exec(err.sqlMessage ?? "")?.[1] ?? "";
+  if (key.includes("email")) return new ConflictError("Another account already uses that email.");
+  if (key.includes("username")) return new ConflictError("That username is already taken.");
+  if (key.includes("roles_name")) return new ConflictError("A role with that name already exists.");
   return new ConflictError("That conflicts with an existing record.");
 }
 
 /** Creates the built-in roles the first time (later edits made in the app are kept). */
-async function ensureDefaultRoles(client: PoolClient) {
+async function ensureDefaultRoles(conn: PoolConnection) {
   for (const role of DEFAULT_ROLES) {
-    const { rows } = await client.query(
-      `INSERT INTO auth_roles (key, name, description, is_system) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (key) DO NOTHING RETURNING id`,
+    const [found] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM auth_roles WHERE \`key\` = ?`, [
+      role.key,
+    ]);
+    if (found.length) continue;
+    const [res] = await conn.query<ResultSetHeader>(
+      `INSERT INTO auth_roles (\`key\`, name, description, is_system) VALUES (?, ?, ?, ?)`,
       [role.key, role.name, role.description, role.isSystem],
     );
-    if (rows.length && role.permissions.length) {
-      await client.query(
-        `INSERT INTO auth_role_permissions (role_id, permission) SELECT $1, unnest($2::text[])`,
-        [rows[0].id, role.permissions],
-      );
+    if (role.permissions.length) {
+      await conn.query(`INSERT INTO auth_role_permissions (role_id, permission) VALUES ?`, [
+        role.permissions.map((p) => [res.insertId, p]),
+      ]);
     }
   }
 }
@@ -78,8 +81,8 @@ async function ensureDefaultRoles(client: PoolClient) {
 /* ---------------------------------------------------------------- setup */
 
 export async function hasAnyUser() {
-  const { rows } = await pool.query(`SELECT EXISTS (SELECT 1 FROM auth_users) AS any`);
-  return rows[0].any as boolean;
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT 1 FROM auth_users LIMIT 1`);
+  return rows.length > 0;
 }
 
 export const setupCodeConfigured = () => !!process.env.AUTH_SETUP_CODE;
@@ -101,31 +104,32 @@ export async function setupOwner(input: Record<string, unknown>, request: Reques
   const problem = passwordProblem(input.password, profile.username);
   if (problem) throw new BadRequestError(problem);
   const hash = await hashPassword(input.password as string);
-  const userId = await withTransaction(async (client) => {
-    // Serialize concurrent setup attempts; only the very first account may be created here.
-    await client.query(`LOCK TABLE auth_users IN EXCLUSIVE MODE`);
-    const { rows: existing } = await client.query(`SELECT 1 FROM auth_users LIMIT 1`);
-    if (existing.length)
-      throw new ForbiddenError("The owner account already exists. Sign in instead.", "setup_done");
-    await ensureDefaultRoles(client);
-    const { rows } = await client.query(
-      `INSERT INTO auth_users (username, name, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id`,
-      [profile.username, profile.name, profile.email, hash],
-    );
-    const id = Number(rows[0].id);
-    await client.query(
-      `INSERT INTO auth_user_roles (user_id, role_id) SELECT $1, id FROM auth_roles WHERE key = $2`,
-      [id, OWNER_ROLE_KEY],
-    );
-    await audit(
-      { userId: id, username: profile.username! },
-      "auth.setup",
-      profile.username!,
-      { name: profile.name },
-      client,
-    );
-    return id;
-  });
+  // Serialize concurrent setup attempts; only the very first account may be created here.
+  const userId = await withLock("owner_setup", () =>
+    withTransaction(async (conn) => {
+      const [existing] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM auth_users LIMIT 1`);
+      if (existing.length)
+        throw new ForbiddenError("The owner account already exists. Sign in instead.", "setup_done");
+      await ensureDefaultRoles(conn);
+      const [res] = await conn.query<ResultSetHeader>(
+        `INSERT INTO auth_users (username, name, email, password_hash) VALUES (?, ?, ?, ?)`,
+        [profile.username, profile.name, profile.email, hash],
+      );
+      const id = res.insertId;
+      await conn.query(
+        `INSERT INTO auth_user_roles (user_id, role_id) SELECT ?, id FROM auth_roles WHERE \`key\` = ?`,
+        [id, OWNER_ROLE_KEY],
+      );
+      await audit(
+        { userId: id, username: profile.username! },
+        "auth.setup",
+        profile.username!,
+        { name: profile.name },
+        conn,
+      );
+      return id;
+    }),
+  );
   await createSession(userId, request);
 }
 
@@ -138,11 +142,11 @@ export async function login(input: Record<string, unknown>, request: Request) {
   const password = typeof input.password === "string" ? input.password : "";
   if (!username || !password) throw new BadRequestError("Enter your username and password.");
 
-  const { rows } = await pool.query(
+  const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT id, username, password_hash, status, failed_login_count, locked_until
-     FROM auth_users WHERE lower(username) = lower($1) OR lower(email) = lower($1)
-     ORDER BY lower(username) = lower($1) DESC LIMIT 1`,
-    [username],
+     FROM auth_users WHERE username_key = lower(?) OR email_key = lower(?)
+     ORDER BY username_key = lower(?) DESC LIMIT 1`,
+    [username, username, username],
   );
   const user = rows[0];
   if (!user) {
@@ -171,10 +175,10 @@ export async function login(input: Record<string, unknown>, request: Request) {
         ? Math.min(LOCK_MINUTES * 2 ** (failures - MAX_FAILED_LOGINS), 24 * 60)
         : 0;
     await pool.query(
-      `UPDATE auth_users SET failed_login_count = $2,
-         locked_until = CASE WHEN $3::int > 0 THEN now() + make_interval(mins => $3::int) ELSE locked_until END
-       WHERE id = $1`,
-      [user.id, failures, lockMinutes],
+      `UPDATE auth_users SET failed_login_count = ?,
+         locked_until = CASE WHEN ? > 0 THEN NOW(6) + INTERVAL ? MINUTE ELSE locked_until END
+       WHERE id = ?`,
+      [failures, lockMinutes, lockMinutes, user.id],
     );
     await audit(actor, "auth.login_failed", user.username, {
       reason: "wrong_password",
@@ -189,9 +193,9 @@ export async function login(input: Record<string, unknown>, request: Request) {
   }
 
   await pool.query(
-    `UPDATE auth_users SET failed_login_count = 0, locked_until = NULL, last_login_at = now()
-       ${needsRehash ? ", password_hash = $2" : ""} WHERE id = $1`,
-    needsRehash ? [user.id, await hashPassword(password)] : [user.id],
+    `UPDATE auth_users SET failed_login_count = 0, locked_until = NULL, last_login_at = NOW(6)
+       ${needsRehash ? ", password_hash = ?" : ""} WHERE id = ?`,
+    needsRehash ? [await hashPassword(password), user.id] : [user.id],
   );
   await createSession(Number(user.id), request);
   await audit(actor, "auth.login", user.username, {
@@ -203,7 +207,9 @@ export async function login(input: Record<string, unknown>, request: Request) {
 
 /** Changes your own password; every other session of yours is signed out. */
 export async function changeOwnPassword(user: AuthUser, input: Record<string, unknown>) {
-  const { rows } = await pool.query(`SELECT password_hash FROM auth_users WHERE id = $1`, [user.id]);
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT password_hash FROM auth_users WHERE id = ?`, [
+    user.id,
+  ]);
   const current = typeof input.currentPassword === "string" ? input.currentPassword : "";
   if (!(await verifyPassword(current, rows[0].password_hash)).ok) {
     throw new BadRequestError("Your current password is not correct.");
@@ -213,8 +219,8 @@ export async function changeOwnPassword(user: AuthUser, input: Record<string, un
   if (input.newPassword === current)
     throw new BadRequestError("Choose a password different from the current one.");
   await pool.query(
-    `UPDATE auth_users SET password_hash = $2, must_change_password = false, password_changed_at = now(), updated_at = now() WHERE id = $1`,
-    [user.id, await hashPassword(input.newPassword as string)],
+    `UPDATE auth_users SET password_hash = ?, must_change_password = false, password_changed_at = NOW(6), updated_at = NOW(6) WHERE id = ?`,
+    [await hashPassword(input.newPassword as string), user.id],
   );
   const signedOut = await revokeUserSessions(user.id, user.sessionId);
   await audit({ userId: user.id, username: user.username }, "auth.password_change", user.username, {

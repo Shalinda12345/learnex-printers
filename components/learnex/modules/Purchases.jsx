@@ -629,51 +629,49 @@ export function Purchases({
               </tr>
             </thead>
             <tbody>
-              {filtered.map(
-                (o) => (
-                  <tr
-                    key={o.id}
-                    className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
-                    onClick={() => setSelected(o)}
-                  >
-                    <td className="py-3 px-5 font-medium">{o.id}</td>
-                    <td className="py-3 px-2">{o.supplier}</td>
-                    <td className={`py-3 px-2 ${subText}`}>{o.items}</td>
-                    <td className="py-3 px-2 font-medium">{money(o.total)}</td>
-                    <td className="py-3 px-2">
-                      {poIsUnpaid(o) ? (
-                        <Badge tone="amber">Unpaid</Badge>
-                      ) : (
-                        <span className={`text-xs ${subText}`}>{accName(o.cashAccount || MAIN_CASH_ID)}</span>
-                      )}
-                    </td>
-                    <td className={`py-3 px-2 ${subText}`}>{fmtDate(o.date)}</td>
-                    <td className="py-3 px-5">
-                      <AttachmentLink attachment={o.attachment} subText={subText} />
-                    </td>
-                    <td className="py-3 px-5">
-                      <div className="flex items-center justify-end">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deletePurchase(o);
-                          }}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ),
-                filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className={`text-center py-10 text-sm ${subText}`}>
-                      No purchase orders yet. Create one to log a supplier purchase and add stock to Raw
-                      Materials.
-                    </td>
-                  </tr>
-                ),
+              {filtered.map((o) => (
+                <tr
+                  key={o.id}
+                  className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
+                  onClick={() => setSelected(o)}
+                >
+                  <td className="py-3 px-5 font-medium">{o.id}</td>
+                  <td className="py-3 px-2">{o.supplier}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{o.items}</td>
+                  <td className="py-3 px-2 font-medium">{money(o.total)}</td>
+                  <td className="py-3 px-2">
+                    {poIsUnpaid(o) ? (
+                      <Badge tone="amber">Unpaid</Badge>
+                    ) : (
+                      <span className={`text-xs ${subText}`}>{accName(o.cashAccount || MAIN_CASH_ID)}</span>
+                    )}
+                  </td>
+                  <td className={`py-3 px-2 ${subText}`}>{fmtDate(o.date)}</td>
+                  <td className="py-3 px-5">
+                    <AttachmentLink attachment={o.attachment} subText={subText} />
+                  </td>
+                  <td className="py-3 px-5">
+                    <div className="flex items-center justify-end">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deletePurchase(o);
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={8} className={`text-center py-10 text-sm ${subText}`}>
+                    No purchase orders yet. Create one to log a supplier purchase and add stock to Raw
+                    Materials.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

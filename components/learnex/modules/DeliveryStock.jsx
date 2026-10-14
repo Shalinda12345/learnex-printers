@@ -960,8 +960,9 @@ export function DeliveryStock({
           // stock was taken out and never returned — give it back
           return { ...p, stock: p.stock + li.taken };
         }
-        // completed: the returned portion was already added back — remove it again
-        return { ...p, stock: Math.max(0, p.stock - (li.returned || 0)) };
+        // completed: the returned portion is already back on the shelf; the sold
+        // portion comes back too, because its sale is removed along with the run
+        return { ...p, stock: p.stock + Math.max(0, li.taken - (li.returned || 0)) };
       }),
     );
     if (run.ledgerTxnId) {
@@ -1093,81 +1094,79 @@ export function DeliveryStock({
               </tr>
             </thead>
             <tbody>
-              {filtered.map(
-                (r) => (
-                  <tr
-                    key={r.id}
-                    className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
-                    onClick={() => (r.status === "Ongoing" ? setClosingRun(r) : setSelected(r))}
+              {filtered.map((r) => (
+                <tr
+                  key={r.id}
+                  className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
+                  onClick={() => (r.status === "Ongoing" ? setClosingRun(r) : setSelected(r))}
+                >
+                  <td className="py-3 px-5 font-medium">{r.id}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{fmtDate(r.date)}</td>
+                  <td className={`py-3 px-2 ${subText}`}>{r.lineItems.length}</td>
+                  <td className="py-3 px-2">{r.totalTaken}</td>
+                  <td className="py-3 px-2">{r.soldQty === null ? "—" : r.soldQty}</td>
+                  <td className="py-3 px-2 font-medium">
+                    {r.saleAmount === null ? "—" : money(r.saleAmount)}
+                  </td>
+                  <td
+                    className={`py-3 px-2 font-medium ${r.profit !== null && r.profit < 0 ? "text-red-600" : ""}`}
                   >
-                    <td className="py-3 px-5 font-medium">{r.id}</td>
-                    <td className={`py-3 px-2 ${subText}`}>{fmtDate(r.date)}</td>
-                    <td className={`py-3 px-2 ${subText}`}>{r.lineItems.length}</td>
-                    <td className="py-3 px-2">{r.totalTaken}</td>
-                    <td className="py-3 px-2">{r.soldQty === null ? "—" : r.soldQty}</td>
-                    <td className="py-3 px-2 font-medium">
-                      {r.saleAmount === null ? "—" : money(r.saleAmount)}
-                    </td>
-                    <td
-                      className={`py-3 px-2 font-medium ${r.profit !== null && r.profit < 0 ? "text-red-600" : ""}`}
-                    >
-                      {r.profit == null ? "—" : money(r.profit)}
-                    </td>
-                    <td
-                      className={`py-3 px-2 font-medium ${r.netProfit !== null && r.netProfit < 0 ? "text-red-600" : ""}`}
-                    >
-                      {r.netProfit == null ? "—" : money(r.netProfit)}
-                    </td>
-                    <td className="py-3 px-2">
-                      <Badge tone={r.status === "Completed" ? "green" : "amber"}>
-                        {r.status === "Ongoing" ? "Out for Delivery" : "Completed"}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-5">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {r.status === "Ongoing" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setClosingRun(r);
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white"
-                          >
-                            Close Run
-                          </button>
-                        )}
-                        {r.status === "Completed" && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openDateEdit(r);
-                            }}
-                            title="Correct the sale date for this run"
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center ${dark ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-500"}`}
-                          >
-                            <Pencil size={13} />
-                          </button>
-                        )}
+                    {r.profit == null ? "—" : money(r.profit)}
+                  </td>
+                  <td
+                    className={`py-3 px-2 font-medium ${r.netProfit !== null && r.netProfit < 0 ? "text-red-600" : ""}`}
+                  >
+                    {r.netProfit == null ? "—" : money(r.netProfit)}
+                  </td>
+                  <td className="py-3 px-2">
+                    <Badge tone={r.status === "Completed" ? "green" : "amber"}>
+                      {r.status === "Ongoing" ? "Out for Delivery" : "Completed"}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-5">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {r.status === "Ongoing" && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteRun(r);
+                            setClosingRun(r);
                           }}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white"
                         >
-                          <Trash2 size={13} />
+                          Close Run
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ),
-                filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
-                      No delivery runs yet. Start one to record the stock taken out for today&apos;s delivery.
-                    </td>
-                  </tr>
-                ),
+                      )}
+                      {r.status === "Completed" && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDateEdit(r);
+                          }}
+                          title="Correct the sale date for this run"
+                          className={`w-7 h-7 rounded-lg flex items-center justify-center ${dark ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-500"}`}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteRun(r);
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
+                    No delivery runs yet. Start one to record the stock taken out for today&apos;s delivery.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
