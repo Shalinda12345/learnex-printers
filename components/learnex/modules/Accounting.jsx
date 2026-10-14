@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { AlertTriangle, CheckCircle2, Download, Printer, ShieldCheck } from "@/components/learnex/icons";
 import { LedgerBook } from "@/components/learnex/modules/LedgerBook";
+import { StatCard } from "@/components/learnex/ui";
 import {
   NON_PNL_LABEL,
   computeFinancialPosition,
@@ -90,7 +91,6 @@ export function ProfitLossStatement({
   setToast,
   ledger,
   settings,
-  deliveryRuns,
 }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -157,7 +157,7 @@ export function ProfitLossStatement({
           <p className={`text-xs ${subText}`}>
             {"For "}
             {periodLabel}
-            {" \u2014 no date limit is applied unless you set one"}
+            {" — no date limit is applied unless you set one"}
           </p>
         </div>
         <DateRangeBar
@@ -171,10 +171,7 @@ export function ProfitLossStatement({
         />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Revenue</p>
-          <p className="text-xl font-bold mt-1">{money(pnl.revenue)}</p>
-        </div>
+        <StatCard label="Revenue" value={money(pnl.revenue)} cardBg={cardBg} subText={subText} />
         <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
           <p className={`text-xs ${subText}`}>Gross Profit</p>
           <p
@@ -184,23 +181,27 @@ export function ProfitLossStatement({
           </p>
           <p className={`text-xs ${subText} mt-1`}>{round2(pnl.grossMargin)}% margin</p>
         </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Operating Expenses</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{money(pnl.totalOpex)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Net Profit</p>
-          <p className={`text-xl font-bold mt-1 ${pnl.netProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-            {money(pnl.netProfit)}
-          </p>
-        </div>
+        <StatCard
+          label="Operating Expenses"
+          value={money(pnl.totalOpex)}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Net Profit"
+          value={money(pnl.netProfit)}
+          valueClass={pnl.netProfit >= 0 ? "text-emerald-600" : "text-red-600"}
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm`}>
         <div className="flex items-center justify-between mb-2">
           <div>
             <h3 className="font-bold text-base">{(settings && settings.businessName) || "Business"}</h3>
             <p className={`text-xs ${subText}`}>
-              {"Profit or Loss Statement \u2014 "}
+              {"Profit or Loss Statement — "}
               {periodLabel}
             </p>
           </div>
@@ -359,7 +360,7 @@ export function ProfitLossStatement({
           indent={true}
           subText={subText}
           dark={dark}
-          note={"Cash goes down, inventory goes up by the same amount \u2014 so profit is untouched."}
+          note={"Cash goes down, inventory goes up by the same amount — so profit is untouched."}
         />
         <StmtRow
           label="Owner's capital introduced"
@@ -522,25 +523,30 @@ export function FinancialPosition({
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Assets</p>
-          <p className="text-xl font-bold mt-1">{money(pos.totalAssets)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Liabilities</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{money(pos.totalLiabilities)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Net Assets / Equity</p>
-          <p className="text-xl font-bold mt-1 text-emerald-600">{money(pos.totalEquity)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Retained Earnings</p>
-          <p className={`text-xl font-bold mt-1 ${pos.retained >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-            {money(pos.retained)}
-          </p>
+        <StatCard label="Total Assets" value={money(pos.totalAssets)} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label="Total Liabilities"
+          value={money(pos.totalLiabilities)}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Net Assets / Equity"
+          value={money(pos.totalEquity)}
+          valueClass="text-emerald-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Retained Earnings"
+          value={money(pos.retained)}
+          valueClass={pos.retained >= 0 ? "text-emerald-600" : "text-red-600"}
+          cardBg={cardBg}
+          subText={subText}
+        >
           <p className={`text-xs ${subText} mt-1`}>{"Net profit from the P&L, all time"}</p>
-        </div>
+        </StatCard>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm`}>
@@ -575,20 +581,20 @@ export function FinancialPosition({
               note="Unpaid and part-paid customer invoices, including delivery credit bills."
             />
             <StmtRow
-              label={"Inventory \u2014 Finished Goods (at cost)"}
+              label={"Inventory — Finished Goods (at cost)"}
               value={money(pos.finishedGoods)}
               indent={true}
               subText={subText}
               dark={dark}
             />
             <StmtRow
-              label={"Inventory \u2014 Raw Materials (at cost)"}
+              label={"Inventory — Raw Materials (at cost)"}
               value={money(pos.rawMaterialStock)}
               indent={true}
               subText={subText}
               dark={dark}
               note={
-                "Valued at weighted average cost \u2014 the blended cost of the stock actually on hand. This is where your raw material purchases live, as an asset, until the materials are consumed or sold."
+                "Valued at weighted average cost — the blended cost of the stock actually on hand. This is where your raw material purchases live, as an asset, until the materials are consumed or sold."
               }
             />
           </StmtSection>
@@ -610,7 +616,7 @@ export function FinancialPosition({
               subText={subText}
               dark={dark}
               note={
-                "Purchase orders recorded as unpaid \u2014 goods received but the supplier has not been paid yet."
+                "Purchase orders recorded as unpaid — goods received but the supplier has not been paid yet."
               }
             />
             <StmtRow
@@ -660,7 +666,7 @@ export function FinancialPosition({
               subText={subText}
               dark={dark}
               note={
-                "The stock, cash and balances that already existed before this accounting structure was switched on. Standard practice when a business moves onto a new system mid-year \u2014 it keeps the statement balanced without altering a single record you had already entered."
+                "The stock, cash and balances that already existed before this accounting structure was switched on. Standard practice when a business moves onto a new system mid-year — it keeps the statement balanced without altering a single record you had already entered."
               }
             />
             <StmtRow
@@ -696,7 +702,7 @@ export function FinancialPosition({
         <h3 className="font-semibold mb-2">How to read this</h3>
         <p className={`text-sm ${subText} leading-relaxed`}>
           {
-            "When you buy raw materials, your Cash Account goes down and Inventory \u2014 Raw Materials goes up by the same amount. Total assets do not change, and profit does not change. Consuming the material later is still only a stock movement, not an expense. The cost reaches the Profit or Loss statement in one place only \u2014 as Cost of Goods Sold, once the finished goods are actually sold. That is what makes the net profit figure trustworthy."
+            "When you buy raw materials, your Cash Account goes down and Inventory — Raw Materials goes up by the same amount. Total assets do not change, and profit does not change. Consuming the material later is still only a stock movement, not an expense. The cost reaches the Profit or Loss statement in one place only — as Cost of Goods Sold, once the finished goods are actually sold. That is what makes the net profit figure trustworthy."
           }
         </p>
       </div>

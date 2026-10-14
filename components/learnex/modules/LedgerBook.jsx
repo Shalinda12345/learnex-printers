@@ -1,26 +1,26 @@
 import { useState, useMemo } from "react";
-import { AttachmentLink, Badge, Field, FileUpload, Modal, inputCls } from "@/components/learnex/ui";
+import { AttachmentLink, Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
   NON_PNL_LABEL,
-  SEED_CASH_ACCOUNTS,
   computeNonPnL,
   computePnL,
   isPnlTxn,
+  nextTxnId,
   payablesFromPOs,
   receivablesFromOrders,
   totalCash,
   txnKind,
+  withDefaultAccounts,
 } from "@/lib/learnex/accounting";
 import { Plus, ReceiptText, Save, Trash2 } from "@/components/learnex/icons";
 import { REVENUE_TREND } from "@/lib/learnex/seed";
 import { TrendChart } from "@/components/learnex/charts";
 import { fmtDate, money, round2, todayISO } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
 
 export function LedgerModal({ onClose, onSave, dark, cardBg, subText, inputBg, cashAccounts }) {
-  const accs = cashAccounts && cashAccounts.length ? cashAccounts : SEED_CASH_ACCOUNTS;
+  const accs = withDefaultAccounts(cashAccounts);
   const [account, setAccount] = useState((accs.find((a) => a.purpose === "general") || accs[0]).id);
   const [type, setType] = useState("Expense");
   const [desc, setDesc] = useState("");
@@ -123,7 +123,7 @@ export function LedgerModal({ onClose, onSave, dark, cardBg, subText, inputBg, c
             {isPnlTxn({ type, category })
               ? "Goes into the Profit or Loss statement."
               : (NON_PNL_LABEL[txnKind({ type, category })] || "Balance sheet movement") +
-                " \u2014 this will not change your profit."}
+                " — this will not change your profit."}
           </p>
         </div>
         <FileUpload
@@ -132,7 +132,6 @@ export function LedgerModal({ onClose, onSave, dark, cardBg, subText, inputBg, c
           onChange={setAttachment}
           dark={dark}
           subText={subText}
-          inputBg={inputBg}
         />
         <button
           type="submit"
@@ -155,14 +154,13 @@ export function LedgerBook({
   setToast,
   ledger,
   setLedger,
-  customers,
   cashAccounts,
   salesOrders,
   purchaseOrders,
 }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [typeFilter, setTypeFilter] = useState("All");
-  const accs = cashAccounts && cashAccounts.length ? cashAccounts : SEED_CASH_ACCOUNTS;
+  const accs = withDefaultAccounts(cashAccounts);
   // Income, expenses and profit all come from the Profit or Loss engine, so
   // stock and raw material purchases are excluded from every figure here.
   const pnl = useMemo(() => computePnL(ledger, "", ""), [ledger]);
@@ -175,8 +173,8 @@ export function LedgerBook({
   const payable = payablesFromPOs(purchaseOrders);
   const filtered = ledger.filter((t) => typeFilter === "All" || t.type === typeFilter);
   const sorted = [...filtered].sort((a, b) => (a.date < b.date ? 1 : -1));
-  async function saveEntry(data) {
-    const id = await nextSeq(ledger, "id", "TXN-", 8821);
+  function saveEntry(data) {
+    const id = nextTxnId(ledger);
     setLedger((prev) => [{ id, ...data }, ...prev]);
     setToast(`${data.type} of ${money(data.amount)} recorded.`);
     setModalOpen(false);
@@ -203,42 +201,57 @@ export function LedgerBook({
         </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>{"Total Income (P&L)"}</p>
-          <p className="text-xl font-bold mt-1 text-emerald-600">{money(income)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>{"Total Expenses (P&L)"}</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{money(expenses)}</p>
+        <StatCard
+          label={"Total Income (P&L)"}
+          value={money(income)}
+          valueClass="text-emerald-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label={"Total Expenses (P&L)"}
+          value={money(expenses)}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        >
           <p className={`text-xs ${subText} mt-1`}>Purchases excluded</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Net Profit (all time)</p>
-          <p className={`text-xl font-bold mt-1 ${net >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-            {money(net)}
-          </p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>{"Cash & Bank"}</p>
-          <p className={`text-xl font-bold mt-1 ${cashTotal >= 0 ? "" : "text-red-600"}`}>
-            {money(cashTotal)}
-          </p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Accounts Receivable</p>
-          <p className="text-xl font-bold mt-1 text-amber-600">{money(receivable)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Accounts Payable</p>
-          <p className="text-xl font-bold mt-1 text-red-600">{money(payable)}</p>
-        </div>
+        </StatCard>
+        <StatCard
+          label="Net Profit (all time)"
+          value={money(net)}
+          valueClass={net >= 0 ? "text-emerald-600" : "text-red-600"}
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label={"Cash & Bank"}
+          value={money(cashTotal)}
+          valueClass={cashTotal >= 0 ? "" : "text-red-600"}
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Accounts Receivable"
+          value={money(receivable)}
+          valueClass="text-amber-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Accounts Payable"
+          value={money(payable)}
+          valueClass="text-red-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
         <p className="text-sm font-medium">{"Stock & raw material purchases are kept out of profit"}</p>
         <p className={`text-xs ${subText} mt-1 leading-relaxed`}>
           {money(excluded.asset_purchase)}
           {
-            " of purchases has been recorded so far. It is paid out of a cash account and sits in inventory on the Statement of Financial Position \u2014 it never reduces the net profit figure above."
+            " of purchases has been recorded so far. It is paid out of a cash account and sits in inventory on the Statement of Financial Position — it never reduces the net profit figure above."
           }
         </p>
       </div>

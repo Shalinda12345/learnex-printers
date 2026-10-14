@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Field, Modal, inputCls } from "@/components/learnex/ui";
+import { Badge, Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   Building2,
   CheckCircle2,
@@ -10,9 +10,8 @@ import {
   Search,
   Trash2,
 } from "@/components/learnex/icons";
-import { MAIN_CASH_ID } from "@/lib/learnex/accounting";
-import { fmtDate, money, numVal, round2, todayISO } from "@/lib/learnex/utils";
-import { nextSeq } from "@/lib/learnex/persistence";
+import { MAIN_CASH_ID, nextTxnId } from "@/lib/learnex/accounting";
+import { fmtDate, money, nextSeqId, numVal, round2, todayISO } from "@/lib/learnex/utils";
 
 /* =====================================================================
    DELIVERY STOCK — track stock taken out for delivery runs and the
@@ -22,23 +21,15 @@ import { nextSeq } from "@/lib/learnex/persistence";
    income (with profit shown using each product's cost).
 ===================================================================== */
 export function DeliveryRunModal({ onClose, onSave, dark, cardBg, subText, inputBg, products }) {
-  var _a, _b;
   const available = products.filter((p) => p.stock > 0);
   const [date, setDate] = useState(todayISO());
-  const [items, setItems] = useState([
-    { productId: ((_a = available[0]) === null || _a === void 0 ? void 0 : _a.id) || "", qty: 1 },
-  ]);
+  const newRow = () => ({ productId: available[0]?.id || "", qty: 1 });
+  const [items, setItems] = useState(() => [newRow()]);
   function updateItem(i, patch) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
   function addRow() {
-    setItems((prev) => {
-      var _a;
-      return [
-        ...prev,
-        { productId: ((_a = available[0]) === null || _a === void 0 ? void 0 : _a.id) || "", qty: 1 },
-      ];
-    });
+    setItems((prev) => [...prev, newRow()]);
   }
   function removeRow(i) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
@@ -347,7 +338,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                     <p className={`text-xs ${subText}`}>
                       {"Taken: "}
                       {li.taken} {li.unit || "pc"}
-                      {" \u00B7 Normal price "}
+                      {" · Normal price "}
                       {money(li.price)}
                     </p>
                   </div>
@@ -431,7 +422,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                   <p className={`text-[11px] mt-2 ${subText}`}>
                     {"Average selling price "}
                     {money(r.avgPrice)}
-                    {" \u00B7 normal price "}
+                    {" · normal price "}
                     {money(li.price)}
                   </p>
                 )}
@@ -639,7 +630,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
           {creditTotal > 0 && (
             <div className="flex justify-between">
               <span className={subText}>
-                {"\u2014 Sold on credit ("}
+                {"— Sold on credit ("}
                 {creditRows.length}
                 {creditRows.length === 1 ? " shop)" : " shops)"}
               </span>
@@ -648,7 +639,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
           )}
           {creditTotal > 0 && (
             <div className="flex justify-between">
-              <span className={subText}>{"\u2014 Cash collected"}</span>
+              <span className={subText}>{"— Cash collected"}</span>
               <span className="font-medium">{money(cashCollected)}</span>
             </div>
           )}
@@ -687,6 +678,10 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
     </Modal>
   );
 }
+// Every ledger line a closed run posted: the cash sale, the credit sale, cost of
+// goods sold and the daily expense.
+const runLedgerIds = (run) =>
+  [run.ledgerTxnId, run.creditTxnId, ...(run.expenseTxnIds || [])].filter(Boolean);
 export function DeliveryStock({
   dark,
   cardBg,
@@ -723,7 +718,7 @@ export function DeliveryStock({
       setEditingDateRun(null);
       return;
     }
-    const relatedIds = [run.ledgerTxnId, run.creditTxnId, ...(run.expenseTxnIds || [])].filter(Boolean);
+    const relatedIds = runLedgerIds(run);
     if (relatedIds.length) {
       setLedger((prev) => prev.map((t) => (relatedIds.includes(t.id) ? { ...t, date: dateDraft } : t)));
     }
@@ -749,7 +744,7 @@ export function DeliveryStock({
   const todaysProfit = completed
     .filter((r) => r.completedDate === today)
     .reduce((s, r) => s + (r.netProfit != null ? r.netProfit : r.profit), 0);
-  async function startRun({ date, lineItems }) {
+  function startRun({ date, lineItems }) {
     const merged = {};
     lineItems.forEach((li) => {
       if (merged[li.productId]) merged[li.productId].taken += li.taken;
@@ -762,7 +757,7 @@ export function DeliveryStock({
         return li ? { ...p, stock: Math.max(0, p.stock - li.taken) } : p;
       }),
     );
-    const runId = await nextSeq(deliveryRuns, "id", "DR-", 1000);
+    const runId = nextSeqId(deliveryRuns, "id", "DR-", 1000);
     setDeliveryRuns((prev) => [
       {
         id: runId,
@@ -786,7 +781,7 @@ export function DeliveryStock({
     setToast(`Delivery run ${runId} started — stock taken out and deducted from inventory.`);
     setModalOpen(false);
   }
-  async function closeRun(run, rows, expenses) {
+  function closeRun(run, rows, expenses) {
     const dailyExpense = (expenses && expenses.dailyExpense) || 0;
     const creditBills = (expenses && expenses.creditBills) || [];
     setProducts((prev) =>
@@ -817,7 +812,7 @@ export function DeliveryStock({
     // Cash actually collected on delivery — this is the only part that should
     // ever increase a Cash Account balance.
     if (cashCollected > 0) {
-      cashTxnId = await nextSeq([...ledger, ...ledgerAdditions], "id", "TXN-", 8821);
+      cashTxnId = nextTxnId([...ledger, ...ledgerAdditions]);
       ledgerAdditions.push({
         id: cashTxnId,
         date: completedDate,
@@ -837,7 +832,7 @@ export function DeliveryStock({
     // the credit-bill Sales Orders created below, and is booked as an actual
     // cash receipt only when it's later collected.
     if (creditAmount > 0) {
-      creditTxnId = await nextSeq([...ledger, ...ledgerAdditions], "id", "TXN-", 8821);
+      creditTxnId = nextTxnId([...ledger, ...ledgerAdditions]);
       ledgerAdditions.push({
         id: creditTxnId,
         date: completedDate,
@@ -852,7 +847,7 @@ export function DeliveryStock({
       });
     }
     if (costAmount > 0) {
-      const cId = await nextSeq([...ledger, ...ledgerAdditions], "id", "TXN-", 8821);
+      const cId = nextTxnId([...ledger, ...ledgerAdditions]);
       expenseTxnIds.push(cId);
       ledgerAdditions.push({
         id: cId,
@@ -865,7 +860,7 @@ export function DeliveryStock({
       });
     }
     if (dailyExpense > 0) {
-      const eId = await nextSeq([...ledger, ...ledgerAdditions], "id", "TXN-", 8821);
+      const eId = nextTxnId([...ledger, ...ledgerAdditions]);
       expenseTxnIds.push(eId);
       ledgerAdditions.push({
         id: eId,
@@ -881,8 +876,8 @@ export function DeliveryStock({
     for (const b of creditBills) {
       const pool = [...(salesOrders || []), ...creditOrders];
       creditOrders.push({
-        id: await nextSeq(pool, "id", "SO-", 1042),
-        invoice: await nextSeq(pool, "invoice", "INV-", 2461),
+        id: nextSeqId(pool, "id", "SO-", 1042),
+        invoice: nextSeqId(pool, "invoice", "INV-", 2461),
         customer: b.shop,
         customerId: null,
         items: b.items.reduce((s, i) => s + i.qty, 0),
@@ -965,14 +960,9 @@ export function DeliveryStock({
         return { ...p, stock: p.stock + Math.max(0, li.taken - (li.returned || 0)) };
       }),
     );
-    if (run.ledgerTxnId) {
-      setLedger((prev) => prev.filter((t) => t.id !== run.ledgerTxnId));
-    }
-    if (run.creditTxnId) {
-      setLedger((prev) => prev.filter((t) => t.id !== run.creditTxnId));
-    }
-    if (run.expenseTxnIds && run.expenseTxnIds.length) {
-      setLedger((prev) => prev.filter((t) => !run.expenseTxnIds.includes(t.id)));
+    const ledgerIds = runLedgerIds(run);
+    if (ledgerIds.length) {
+      setLedger((prev) => prev.filter((t) => !ledgerIds.includes(t.id)));
     }
     if (run.creditOrderIds && run.creditOrderIds.length) {
       setSalesOrders((prev) => prev.filter((o) => !run.creditOrderIds.includes(o.id)));
@@ -994,7 +984,7 @@ export function DeliveryStock({
     ) : null;
   const editDateModal = editingDateRun ? (
     <Modal
-      title={`Correct Sale Date \u2014 ${editingDateRun.id}`}
+      title={`Correct Sale Date — ${editingDateRun.id}`}
       onClose={() => setEditingDateRun(null)}
       cardBg={cardBg}
       dark={dark}
@@ -1002,7 +992,7 @@ export function DeliveryStock({
       <div className="space-y-4">
         <p className={`text-xs ${subText}`}>
           {
-            "Moves the sale, cost of goods sold, daily expense and any credit-bill entries for this run onto the date below \u2014 everywhere they appear: Cash Book, Ledger, Dashboard and Profit & Loss."
+            "Moves the sale, cost of goods sold, daily expense and any credit-bill entries for this run onto the date below — everywhere they appear: Cash Book, Ledger, Dashboard and Profit & Loss."
           }
         </p>
         <Field label="Correct Sale Date" subText={subText}>
@@ -1044,14 +1034,20 @@ export function DeliveryStock({
         </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Out for Delivery</p>
-          <p className="text-xl font-bold mt-1 text-amber-600">{ongoing.length}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Completed Runs</p>
-          <p className="text-xl font-bold mt-1 text-emerald-600">{completed.length}</p>
-        </div>
+        <StatCard
+          label="Out for Delivery"
+          value={ongoing.length}
+          valueClass="text-amber-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Completed Runs"
+          value={completed.length}
+          valueClass="text-emerald-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
         <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
           <p className={`text-xs ${subText}`}>Today&apos;s Delivery Sales</p>
           <p className="text-xl font-bold mt-1">{money(todaysSales)}</p>
@@ -1276,7 +1272,7 @@ export function DeliveryStock({
                         <div key={j} className={`flex justify-between text-[11px] ${subText} mt-0.5`}>
                           <span>
                             {it.name}
-                            {" \u00D7 "}
+                            {" × "}
                             {it.qty}
                             {" at "}
                             {money(it.price)}
@@ -1302,13 +1298,13 @@ export function DeliveryStock({
                   </div>
                   {selected.creditAmount > 0 && (
                     <div className="flex justify-between">
-                      <span className={subText}>{"\u2014 Sold on credit"}</span>
+                      <span className={subText}>{"— Sold on credit"}</span>
                       <span className="font-medium text-amber-600">{money(selected.creditAmount)}</span>
                     </div>
                   )}
                   {selected.creditAmount > 0 && (
                     <div className="flex justify-between">
-                      <span className={subText}>{"\u2014 Cash collected"}</span>
+                      <span className={subText}>{"— Cash collected"}</span>
                       <span className="font-medium">
                         {money(
                           selected.cashCollected != null

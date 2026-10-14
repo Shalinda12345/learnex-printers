@@ -22,12 +22,12 @@ import { CATEGORY_COLORS, REVENUE_TREND } from "@/lib/learnex/seed";
 import { CURRENCY_SYMBOL, PERIODS, fmtDate, isInPeriod, money, round2, todayISO } from "@/lib/learnex/utils";
 import { DonutChart, HBarList, TrendChart } from "@/components/learnex/charts";
 import {
-  SEED_CASH_ACCOUNTS,
   computeNonPnL,
   computePnL,
   payablesFromPOs,
   receivablesFromOrders,
   totalCash,
+  withDefaultAccounts,
 } from "@/lib/learnex/accounting";
 
 /* =====================================================================
@@ -102,7 +102,6 @@ export function Dashboard({
   deliveryRuns,
   cashAccounts,
   purchaseOrders,
-  settings,
 }) {
   const [period, setPeriod] = useState("monthly");
   const anchor = todayISO();
@@ -120,7 +119,7 @@ export function Dashboard({
   // Profit comes from the Profit or Loss engine, so buying stock or raw
   // materials no longer eats into it — those are asset purchases that live on
   // the Statement of Financial Position instead.
-  const accs = cashAccounts && cashAccounts.length ? cashAccounts : SEED_CASH_ACCOUNTS;
+  const accs = withDefaultAccounts(cashAccounts);
   const pnl = useMemo(() => computePnL(periodLedger, "", ""), [periodLedger]);
   const excludedPeriod = useMemo(() => computeNonPnL(periodLedger, "", ""), [periodLedger]);
   const income = pnl.totalIncome;
@@ -227,7 +226,7 @@ export function Dashboard({
         className={`rounded-2xl p-6 bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg shadow-blue-900/20`}
       >
         <p className="text-blue-100 text-sm">Welcome back</p>
-        <h1 className="text-2xl font-bold mt-1">{"LEARNEX Printers & Distributors \u2014 Overview"}</h1>
+        <h1 className="text-2xl font-bold mt-1">{"LEARNEX Printers & Distributors — Overview"}</h1>
         <p className="text-blue-100 text-sm mt-1">
           Here&apos;s how your business is performing, based on everything recorded so far.
         </p>
@@ -237,7 +236,7 @@ export function Dashboard({
           <h3 className="font-semibold text-sm">Viewing</h3>
           <p className={`text-xs ${subText}`}>
             {
-              "Choose the period for income, profit, expenses and order figures below. Choose All Time for figures with no date limit. Profit excludes stock and raw material purchases \u2014 those are paid in cash and held as inventory instead."
+              "Choose the period for income, profit, expenses and order figures below. Choose All Time for figures with no date limit. Profit excludes stock and raw material purchases — those are paid in cash and held as inventory instead."
             }
           </p>
         </div>

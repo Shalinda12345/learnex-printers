@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Field, Modal, inputCls } from "@/components/learnex/ui";
+import { Badge, Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import { Mail, Save, Search, Trash2, UserPlus } from "@/components/learnex/icons";
 import { money, nextNumId } from "@/lib/learnex/utils";
 
@@ -89,22 +89,21 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
         </button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Total Customers</p>
-          <p className="text-xl font-bold mt-1">{customers.length}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Lifetime Revenue</p>
-          <p className="text-xl font-bold mt-1">{money(totalSpent)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Outstanding Balance</p>
-          <p className="text-xl font-bold mt-1 text-amber-600">{money(totalOutstanding)}</p>
-        </div>
-        <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
-          <p className={`text-xs ${subText}`}>Wholesale Accounts</p>
-          <p className="text-xl font-bold mt-1">{customers.filter((c) => c.tier === "Wholesale").length}</p>
-        </div>
+        <StatCard label="Total Customers" value={customers.length} cardBg={cardBg} subText={subText} />
+        <StatCard label="Lifetime Revenue" value={money(totalSpent)} cardBg={cardBg} subText={subText} />
+        <StatCard
+          label="Outstanding Balance"
+          value={money(totalOutstanding)}
+          valueClass="text-amber-600"
+          cardBg={cardBg}
+          subText={subText}
+        />
+        <StatCard
+          label="Wholesale Accounts"
+          value={customers.filter((c) => c.tier === "Wholesale").length}
+          cardBg={cardBg}
+          subText={subText}
+        />
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -165,7 +164,7 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
                     {c.outstanding > 0 ? (
                       <span className="text-red-600 font-medium">{money(c.outstanding)}</span>
                     ) : (
-                      <span className={subText}>{"\u2014"}</span>
+                      <span className={subText}>{"—"}</span>
                     )}
                   </td>
                   <td className="py-3 px-5">
