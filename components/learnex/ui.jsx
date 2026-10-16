@@ -201,12 +201,14 @@ export function Toggle({ on, onClick }) {
     </button>
   );
 }
+// wide: true for forms; "xl" when a form's line items need room for long product names.
 export function Modal({ title, onClose, children, cardBg, dark, wide }) {
+  const maxW = wide === "xl" ? "max-w-5xl" : wide ? "max-w-2xl" : "max-w-md";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full ${wide ? "max-w-2xl" : "max-w-md"} max-h-[90vh] overflow-y-auto rounded-2xl border ${cardBg} shadow-2xl`}
+        className={`w-full ${maxW} max-h-[90vh] overflow-y-auto rounded-2xl border ${cardBg} shadow-2xl`}
       >
         <div
           className={`flex items-center justify-between px-5 py-4 border-b sticky top-0 ${cardBg} ${dark ? "border-slate-800" : "border-slate-100"}`}

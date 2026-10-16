@@ -494,6 +494,55 @@ describe("Sales Orders", () => {
     assert.equal(await page.getByRole("button", { name: "New Order" }).isDisabled(), true);
     await page.context().close();
   });
+
+  test("SO-13 an order prints as an invoice with the business profile, from the list or the order itself", async () => {
+    const fixture = shopFixture();
+    await loadStores({
+      ...fixture,
+      settings: {
+        ...fixture.settings,
+        businessAddress: "1 Main St",
+        businessPhone: "011 555",
+        invoiceNote: "Bank: BOC 123",
+      },
+    });
+    const page = await openApp(browser, "Sales Orders");
+    await newOrder(page, {
+      items: [
+        { productId: 101, qty: 1 },
+        { productId: 102, qty: 2 },
+      ],
+    });
+    await waitSaved(page);
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      row(page, "SO-1043").getByRole("button", { name: "Invoice" }).click(),
+    ]);
+    await popup.waitForLoadState();
+    const html = await popup.content();
+    await page
+      .getByText("Invoice INV-2462 opened — use your browser's print dialog to print or save as PDF.")
+      .waitFor();
+    log(await popup.title());
+    assert.equal(await popup.title(), "Invoice INV-2462 - Acme Traders");
+    assert.match(html, /<h1>Test Shop<\/h1>/);
+    assert.match(html, /1 Main St<br>011 555/);
+    assert.match(html, /Attn: Ann<br>011<br>acme@x\.lk/);
+    assert.match(html, /<td>Beta Toner<\/td>\s*<td class="num">2<\/td>\s*<td class="num">Rs\. 250<\/td>/);
+    assert.match(html, /Tax \(10%\)<\/span><span>Rs\. 150</);
+    assert.match(html, /Balance due<\/span><span>Rs\. 1,650</);
+    assert.match(html, /Bank: BOC 123/);
+    await popup.close();
+    await row(page, "SO-1043").click();
+    const [again] = await Promise.all([
+      page.waitForEvent("popup"),
+      modal(page).getByRole("button", { name: "Print Invoice" }).click(),
+    ]);
+    await again.waitForLoadState();
+    assert.equal(await again.title(), "Invoice INV-2462 - Acme Traders");
+    await again.close();
+    await page.context().close();
+  });
 });
 
 /* ------------------------------------------------------------ Customers */

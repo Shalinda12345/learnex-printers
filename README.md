@@ -42,7 +42,7 @@ Built with Next.js (App Router) and MySQL / MariaDB.
 | `npm start`         | Serve the production build                                                 |
 | `npm run lint`      | ESLint                                                                     |
 | `npm run db:setup`  | Create the MySQL user/database and apply pending migrations                |
-| `npm run test:unit` | Unit tests for the accounting, backup, permission and utility code         |
+| `npm run test:unit` | Unit tests for the accounting, backup, invoice, permission and utility code |
 | `npm run test:db`   | Full suite: database, API and browser tests against a `*_test` database    |
 
 `npm run test:db` builds the app, then runs it against a separate database whose name must end in
