@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { AttachmentLink, Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import { MAIN_CASH_ID, nextTxnId } from "@/lib/learnex/accounting";
-import { Plus, Save, Search, Trash2, Wallet } from "@/components/learnex/icons";
+import { balanceOf as balOf, openInvoice, paidOf } from "@/lib/learnex/invoice";
+import { Plus, Printer, Save, Search, Trash2, Wallet } from "@/components/learnex/icons";
 import { fmtDate, money, nextSeqId, numVal, round2, todayISO } from "@/lib/learnex/utils";
 
 /* =====================================================================
    SALES ORDERS — with New Order form (+ optional invoice attachment)
+   and a printable invoice for every order
 ===================================================================== */
+// Order item columns: product | qty | amount | remove. Below laptop width
+// each item is a small card: the product takes a whole line, so long names
+// stay readable, and qty | amount | remove share the line under it.
+const itemGrid =
+  "grid-cols-[5.5rem_minmax(0,1fr)_2.25rem] lg:grid-cols-[minmax(0,1fr)_5.5rem_7.5rem_2.25rem] gap-x-2 gap-y-1.5";
 export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputBg, products, customers }) {
   const [customerId, setCustomerId] = useState(customers[0]?.id || "");
   const newRow = () => ({ productId: products[0]?.id || "", qty: 1 });
@@ -44,7 +51,7 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
     onSave({ customerId: Number(customerId), lineItems, subtotal, status, payment, attachment });
   }
   return (
-    <Modal title="New Sales Order" onClose={onClose} cardBg={cardBg} dark={dark} wide={true}>
+    <Modal title="New Sales Order" onClose={onClose} cardBg={cardBg} dark={dark} wide="xl">
       <form onSubmit={submit} className="space-y-4">
         <Field label="Customer" subText={subText}>
           <select
@@ -62,39 +69,67 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
         </Field>
         <div>
           <p className={`text-xs font-medium mb-2 ${subText}`}>Order Items</p>
+          <div className={`hidden lg:grid ${itemGrid} mb-1 text-[11px] font-medium ${subText}`}>
+            <span>Product</span>
+            <span>Qty</span>
+            <span className="text-right">Amount</span>
+          </div>
           <div className="space-y-2">
-            {items.map((it, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <select
-                  value={it.productId}
-                  onChange={(e) => updateItem(i, { productId: e.target.value })}
-                  className={`${inputCls(inputBg)} flex-1`}
+            {items.map((it, i) => {
+              const product = products.find((x) => x.id === Number(it.productId));
+              const qty = Number(it.qty) || 0;
+              return (
+                <div
+                  key={i}
+                  className={`grid ${itemGrid} items-start rounded-xl border p-3 lg:p-0 lg:border-0 ${dark ? "border-slate-800" : "border-slate-200"}`}
                 >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                      {" ("}
-                      {p.stock}
-                      {" in stock)"}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min="1"
-                  value={it.qty}
-                  onChange={(e) => updateItem(i, { qty: e.target.value })}
-                  className={`${inputCls(inputBg)} w-20`}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeRow(i)}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 shrink-0"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
+                  <div className="col-span-3 lg:col-span-1 min-w-0">
+                    <select
+                      value={it.productId}
+                      onChange={(e) => updateItem(i, { productId: e.target.value })}
+                      title={product ? product.name : ""}
+                      className={inputCls(inputBg)}
+                    >
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                          {" ("}
+                          {p.stock}
+                          {" in stock)"}
+                        </option>
+                      ))}
+                    </select>
+                    {product && (
+                      <p className={`text-[11px] mt-1 ${qty > product.stock ? "text-red-600" : subText}`}>
+                        {money(product.price)}
+                        {" each · "}
+                        {product.stock}
+                        {" in stock"}
+                      </p>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    value={it.qty}
+                    onChange={(e) => updateItem(i, { qty: e.target.value })}
+                    aria-label="Quantity"
+                    className={inputCls(inputBg)}
+                  />
+                  <span className="h-[42px] flex items-center justify-end text-sm font-medium whitespace-nowrap">
+                    {money(product ? product.price * qty : 0)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeRow(i)}
+                    aria-label="Remove line"
+                    className="w-9 h-[42px] rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <button
             type="button"
@@ -174,9 +209,6 @@ export function SalesOrders({
   const [payAmt, setPayAmt] = useState("");
   const statuses = ["All", "Processing", "Shipped", "Delivered", "Cancelled"];
   const kinds = ["All orders", "Credit bills", "Outstanding balance"];
-  // paid/balance work for old records too — anything marked Paid counts as fully paid
-  const paidOf = (o) => (o.amountPaid != null ? o.amountPaid : o.payment === "Paid" ? o.amount : 0);
-  const balOf = (o) => round2(Math.max(0, o.amount - paidOf(o)));
   const filtered = salesOrders.filter(
     (o) =>
       (statusFilter === "All" || o.status === statusFilter) &&
@@ -259,6 +291,14 @@ export function SalesOrders({
         ? `${money(amt)} received from ${o.customer}. Bill settled in full.`
         : `${money(amt)} received from ${o.customer}. Balance remaining ${money(newBal)}.`,
     );
+  }
+  function printInvoice(o) {
+    const customer = o.customerId ? customers.find((c) => c.id === o.customerId) : null;
+    if (openInvoice(o, { settings, customer })) {
+      setToast(`Invoice ${o.invoice || o.id} opened — use your browser's print dialog to print or save as PDF.`);
+    } else {
+      setToast("The invoice window was blocked — allow pop-ups for this site and try again.");
+    }
   }
   const statusTone = { Processing: "amber", Shipped: "blue", Delivered: "green", Cancelled: "red" };
   const paymentTone = { Paid: "green", Pending: "amber", Overdue: "red", Refunded: "slate" };
@@ -534,6 +574,17 @@ export function SalesOrders({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          printInvoice(o);
+                        }}
+                        title={`Print invoice ${o.invoice || o.id}`}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border ${dark ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                      >
+                        <Printer size={12} />
+                        {" Invoice"}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           deleteOrder(o);
                         }}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
@@ -680,6 +731,13 @@ export function SalesOrders({
               </p>
             )}
             <AttachmentLink attachment={selected.attachment} subText={subText} />
+            <button
+              onClick={() => printInvoice(selected)}
+              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors mt-2"
+            >
+              <Printer size={14} />
+              {" Print Invoice"}
+            </button>
             <button
               onClick={() => deleteOrder(selected)}
               className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-red-900/20 transition-colors mt-2"

@@ -150,6 +150,48 @@ export function SettingsPage({
               className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
             />
           </div>
+          <div>
+            <label className={`text-xs font-medium ${subText}`}>Business Address</label>
+            <textarea
+              rows={2}
+              value={form.businessAddress || ""}
+              onChange={(e) => setForm((f) => ({ ...f, businessAddress: e.target.value }))}
+              className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={`text-xs font-medium ${subText}`}>Business Phone</label>
+              <input
+                value={form.businessPhone || ""}
+                onChange={(e) => setForm((f) => ({ ...f, businessPhone: e.target.value }))}
+                className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
+              />
+            </div>
+            <div>
+              <label className={`text-xs font-medium ${subText}`}>Business Email</label>
+              <input
+                type="email"
+                value={form.businessEmail || ""}
+                onChange={(e) => setForm((f) => ({ ...f, businessEmail: e.target.value }))}
+                className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
+              />
+            </div>
+          </div>
+          <div>
+            <label className={`text-xs font-medium ${subText}`}>Invoice Note</label>
+            <textarea
+              rows={3}
+              value={form.invoiceNote || ""}
+              onChange={(e) => setForm((f) => ({ ...f, invoiceNote: e.target.value }))}
+              className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
+              placeholder="e.g. bank details or payment terms"
+            />
+            <p className={`text-xs ${subText} mt-1`}>
+              Printed at the foot of every sales invoice. The business name, address, phone and email
+              head the invoice.
+            </p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={`text-xs font-medium ${subText}`}>Default Tax Rate (%)</label>
