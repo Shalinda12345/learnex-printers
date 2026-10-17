@@ -309,5 +309,8 @@ body { margin: 0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Robo
 .gap-y-1\.5 { row-gap: 0.375rem; }
 .h-\[42px\] { height: 42px; }
 .grid-cols-\[5\.5rem_minmax\(0\,1fr\)_2\.25rem\] { grid-template-columns: 5.5rem minmax(0,1fr) 2.25rem; }
+.grid-cols-\[minmax\(140px\,1fr\)_4\.75rem_6rem_6\.5rem_2\.25rem\] { grid-template-columns: minmax(140px, 1fr) 4.75rem 6rem 6.5rem 2.25rem; }
+.sales-order-item-row { display: grid; grid-template-columns: minmax(180px, 1fr) 5rem 6.5rem 7rem 2.5rem; column-gap: 0.5rem; align-items: center; }
 @media (min-width:1024px){ .lg\:grid { display: grid; } .lg\:col-span-1 { grid-column: span 1 / span 1; } .lg\:grid-cols-\[minmax\(0\,1fr\)_5\.5rem_7\.5rem_2\.25rem\] { grid-template-columns: minmax(0,1fr) 5.5rem 7.5rem 2.25rem; } .lg\:p-0 { padding: 0; } .lg\:border-0 { border-width: 0; } }
+
 

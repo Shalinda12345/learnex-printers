@@ -201,7 +201,10 @@ describe("Sales Orders", () => {
     for (let i = 0; i < items.length; i++) {
       if (i > 0) await m.getByRole("button", { name: "Add line item" }).click();
       await itemRows(m).nth(i).locator("select").selectOption(String(items[i].productId));
-      await itemRows(m).nth(i).locator("input[type=number]").fill(String(items[i].qty));
+      await itemRows(m).nth(i).locator("input[type=number]").first().fill(String(items[i].qty));
+      if (items[i].price !== undefined) {
+        await itemRows(m).nth(i).locator("input[aria-label='Unit Price']").fill(String(items[i].price));
+      }
     }
     await field(m, "Fulfillment Status").selectOption(status);
     await field(m, "Payment Status").selectOption(payment);
@@ -541,6 +544,23 @@ describe("Sales Orders", () => {
     await again.waitForLoadState();
     assert.equal(await again.title(), "Invoice INV-2462 - Acme Traders");
     await again.close();
+    await page.context().close();
+  });
+
+  test("SO-13 a custom unit price can be inserted and saved in a new sales order", async () => {
+    const page = await openApp(browser, "Sales Orders");
+    await newOrder(page, {
+      items: [{ productId: 101, qty: 2, price: 1200 }],
+      status: "Delivered",
+      payment: "Paid",
+    });
+    await waitSaved(page);
+    const s = await stores();
+    const o = s.salesOrders[0];
+    assert.equal(o.lineItems[0].price, 1200);
+    // 2 * 1200 = 2400 subtotal, 10% tax = 240, total = 2640
+    assert.equal(o.amount, 2640);
+    assert.equal(o.tax, 240);
     await page.context().close();
   });
 });
