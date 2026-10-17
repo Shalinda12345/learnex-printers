@@ -9,20 +9,30 @@ import { fmtDate, money, nextSeqId, numVal, round2, todayISO } from "@/lib/learn
    SALES ORDERS — with New Order form (+ optional invoice attachment)
    and a printable invoice for every order
 ===================================================================== */
-// Order item columns: product | qty | amount | remove. Below laptop width
-// each item is a small card: the product takes a whole line, so long names
-// stay readable, and qty | amount | remove share the line under it.
-const itemGrid =
-  "grid-cols-[5.5rem_minmax(0,1fr)_2.25rem] lg:grid-cols-[minmax(0,1fr)_5.5rem_7.5rem_2.25rem] gap-x-2 gap-y-1.5";
+// Order item columns: Item Name | Qty | Unit Price | Amount | Remove — always in a single row
+const itemRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(180px, 1fr) 5rem 6.5rem 7rem 2.5rem",
+  columnGap: "0.5rem",
+  alignItems: "center",
+};
+const itemGrid = "sales-order-item-row";
 export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputBg, products, customers }) {
   const [customerId, setCustomerId] = useState(customers[0]?.id || "");
-  const newRow = () => ({ productId: products[0]?.id || "", qty: 1 });
+  const newRow = () => {
+    const first = products[0];
+    return { productId: first?.id || "", qty: 1, unitPrice: first ? first.price : 0 };
+  };
   const [items, setItems] = useState(() => [newRow()]);
   const [status, setStatus] = useState("Processing");
   const [payment, setPayment] = useState("Pending");
   const [attachment, setAttachment] = useState(null);
   function updateItem(i, patch) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+  function onProductChange(i, productId) {
+    const p = products.find((x) => x.id === Number(productId));
+    updateItem(i, { productId, unitPrice: p ? p.price : 0 });
   }
   function addRow() {
     setItems((prev) => [...prev, newRow()]);
@@ -33,9 +43,18 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
   const lineItems = items
     .map((it) => {
       const p = products.find((x) => x.id === Number(it.productId));
-      return p
-        ? { productId: p.id, name: p.name, qty: Number(it.qty) || 0, price: p.price, availableStock: p.stock }
-        : null;
+      if (!p) return null;
+      const price =
+        it.unitPrice !== undefined && it.unitPrice !== ""
+          ? Math.max(0, numVal(it.unitPrice, 0))
+          : (p.price ?? 0);
+      return {
+        productId: p.id,
+        name: p.name,
+        qty: Number(it.qty) || 0,
+        price: round2(price),
+        availableStock: p.stock,
+      };
     })
     .filter(Boolean);
   const subtotal = round2(lineItems.reduce((s, i) => s + i.price * i.qty, 0));
@@ -68,68 +87,97 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
           </select>
         </Field>
         <div>
-          <p className={`text-xs font-medium mb-2 ${subText}`}>Order Items</p>
-          <div className={`hidden lg:grid ${itemGrid} mb-1 text-[11px] font-medium ${subText}`}>
-            <span>Product</span>
-            <span>Qty</span>
-            <span className="text-right">Amount</span>
+          <div className="flex items-center justify-between mb-2">
+            <p className={`text-xs font-semibold ${subText}`}>Order Items</p>
+            <span className={`text-[11px] ${subText}`}>Each line item in one row</span>
           </div>
-          <div className="space-y-2">
-            {items.map((it, i) => {
-              const product = products.find((x) => x.id === Number(it.productId));
-              const qty = Number(it.qty) || 0;
-              return (
-                <div
-                  key={i}
-                  className={`grid ${itemGrid} items-start rounded-xl border p-3 lg:p-0 lg:border-0 ${dark ? "border-slate-800" : "border-slate-200"}`}
-                >
-                  <div className="col-span-3 lg:col-span-1 min-w-0">
-                    <select
-                      value={it.productId}
-                      onChange={(e) => updateItem(i, { productId: e.target.value })}
-                      title={product ? product.name : ""}
-                      className={inputCls(inputBg)}
+          <div className="overflow-x-auto pb-1">
+            <div className="min-w-[560px]">
+              <div
+                className={`sales-order-item-row ${itemGrid} mb-2 text-[11px] font-semibold uppercase tracking-wider ${subText} px-1`}
+                style={itemRowStyle}
+              >
+                <span>Item Name</span>
+                <span className="text-center">Qty</span>
+                <span className="text-right">Unit Price</span>
+                <span className="text-right">Amount</span>
+                <span />
+              </div>
+              <div className="space-y-2">
+                {items.map((it, i) => {
+                  const product = products.find((x) => x.id === Number(it.productId));
+                  const qty = Number(it.qty) || 0;
+                  const itemPrice =
+                    it.unitPrice !== undefined && it.unitPrice !== ""
+                      ? Math.max(0, numVal(it.unitPrice, 0))
+                      : (product ? product.price : 0);
+                  const rowAmount = round2(qty * itemPrice);
+                  return (
+                    <div
+                      key={i}
+                      className={`sales-order-item-row ${itemGrid}`}
+                      style={itemRowStyle}
                     >
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                          {" ("}
-                          {p.stock}
-                          {" in stock)"}
-                        </option>
-                      ))}
-                    </select>
-                    {product && (
-                      <p className={`text-[11px] mt-1 ${qty > product.stock ? "text-red-600" : subText}`}>
-                        {money(product.price)}
-                        {" each · "}
-                        {product.stock}
-                        {" in stock"}
-                      </p>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    value={it.qty}
-                    onChange={(e) => updateItem(i, { qty: e.target.value })}
-                    aria-label="Quantity"
-                    className={inputCls(inputBg)}
-                  />
-                  <span className="h-[42px] flex items-center justify-end text-sm font-medium whitespace-nowrap">
-                    {money(product ? product.price * qty : 0)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    aria-label="Remove line"
-                    className="w-9 h-[42px] rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              );
-            })}
+                      <div className="min-w-0">
+                        <select
+                          value={it.productId}
+                          onChange={(e) => onProductChange(i, e.target.value)}
+                          title={product ? product.name : ""}
+                          className={inputCls(inputBg)}
+                        >
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                              {" ("}
+                              {p.stock}
+                              {" in stock)"}
+                            </option>
+                          ))}
+                        </select>
+                        {product && qty > product.stock && (
+                          <p className="text-[11px] text-red-600 font-medium mt-0.5 truncate">
+                            Only {product.stock} in stock
+                          </p>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={it.qty}
+                        onChange={(e) => updateItem(i, { qty: e.target.value })}
+                        placeholder="Qty"
+                        aria-label="Quantity"
+                        className={`${inputCls(inputBg)} text-center px-2`}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={it.unitPrice !== undefined ? it.unitPrice : (product ? product.price : "")}
+                        onChange={(e) => updateItem(i, { unitPrice: e.target.value })}
+                        placeholder="Price"
+                        aria-label="Unit Price"
+                        className={`${inputCls(inputBg)} text-right px-2`}
+                      />
+                      <span className="h-[42px] flex items-center justify-end text-sm font-semibold tabular-nums whitespace-nowrap px-1">
+                        {money(rowAmount)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(i)}
+                        disabled={items.length <= 1}
+                        title={items.length <= 1 ? "At least one item is required" : "Remove line"}
+                        aria-label="Remove line"
+                        className="w-9 h-[42px] rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
           <button
             type="button"
@@ -341,11 +389,11 @@ export function SalesOrders({
       prev.map((c) =>
         c.id === customer.id
           ? {
-              ...c,
-              orders: c.orders + 1,
-              spent: c.spent + total,
-              outstanding: c.outstanding + (payment === "Paid" ? 0 : total),
-            }
+            ...c,
+            orders: c.orders + 1,
+            spent: c.spent + total,
+            outstanding: c.outstanding + (payment === "Paid" ? 0 : total),
+          }
           : c,
       ),
     );
@@ -408,11 +456,11 @@ export function SalesOrders({
         prev.map((c) =>
           c.id === o.customerId
             ? {
-                ...c,
-                orders: Math.max(0, c.orders - 1),
-                spent: Math.max(0, c.spent - o.amount),
-                outstanding: Math.max(0, c.outstanding - (o.payment === "Paid" ? 0 : o.amount)),
-              }
+              ...c,
+              orders: Math.max(0, c.orders - 1),
+              spent: Math.max(0, c.spent - o.amount),
+              outstanding: Math.max(0, c.outstanding - (o.payment === "Paid" ? 0 : o.amount)),
+            }
             : c,
         ),
       );
@@ -644,16 +692,28 @@ export function SalesOrders({
             {selected.lineItems && selected.lineItems.length > 0 && (
               <div className={`border-t pt-3 ${dark ? "border-slate-800" : "border-slate-100"}`}>
                 <p className={`text-xs font-medium mb-2 ${subText}`}>Line Items</p>
-                {selected.lineItems.map((li, i) => (
-                  <div key={i} className="flex justify-between text-xs py-1">
-                    <span>
-                      {li.name}
-                      {" × "}
-                      {li.qty}
-                    </span>
-                    <span>{money(li.price * li.qty)}</span>
-                  </div>
-                ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className={`border-b ${dark ? "border-slate-800 text-slate-400" : "border-slate-200 text-slate-500"} text-[11px]`}>
+                        <th className="text-left py-1.5 font-medium">Item Name</th>
+                        <th className="text-center py-1.5 font-medium w-12">Qty</th>
+                        <th className="text-right py-1.5 font-medium w-20">Unit Price</th>
+                        <th className="text-right py-1.5 font-medium w-24">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {selected.lineItems.map((li, i) => (
+                        <tr key={i} className="py-1">
+                          <td className="py-1.5 font-medium">{li.name}</td>
+                          <td className="text-center py-1.5">{li.qty}</td>
+                          <td className="text-right py-1.5">{money(li.price)}</td>
+                          <td className="text-right py-1.5 font-semibold">{money(li.price * li.qty)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
             <div
