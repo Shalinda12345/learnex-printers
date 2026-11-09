@@ -20,6 +20,8 @@ import {
   cashAccountBalance,
   cashAccountOf,
   cashLinesFor,
+  computeCashFlow,
+  computeEquityChanges,
   computeFinancialPosition,
   computeNonPnL,
   computePnL,
@@ -29,6 +31,7 @@ import {
   txnKind,
   withDefaultAccounts,
 } from "@/lib/learnex/accounting";
+import { EQUITY_COLUMNS, cashFlowRows, equityRows, pnlRows, positionRows } from "@/lib/learnex/statements";
 import { downloadCSV, exportPDF, fmtDate, numVal, round2 } from "@/lib/learnex/utils";
 
 export const REPORT_TYPES = [
@@ -41,7 +44,19 @@ export const REPORT_TYPES = [
   {
     key: "sfp",
     name: "Statement of Financial Position",
-    desc: "Assets, liabilities and equity as at today, with net profit carried in as retained earnings.",
+    desc: "Non-current and current assets, liabilities and equity as at today, with net profit carried in as retained earnings.",
+    icon: Layers,
+  },
+  {
+    key: "cash_flow",
+    name: "Statement of Cash Flows",
+    desc: "Cash from operating, investing and financing activities for the period, from opening to closing cash, with net profit reconciled to operating cash.",
+    icon: DollarSign,
+  },
+  {
+    key: "equity_changes",
+    name: "Statement of Changes in Equity",
+    desc: "The owner's capital, retained earnings and drawings rolled forward from the start of the period to the end.",
     icon: Layers,
   },
   {
@@ -171,37 +186,7 @@ export function Reports({
       const p = computePnL(ledger, dateFrom, dateTo);
       const ex = computeNonPnL(ledger, dateFrom, dateTo);
       headers = ["Profit or Loss Statement", "Amount"];
-      rows = [];
-      rows.push(["REVENUE", ""]);
-      Object.keys(p.revenueByCat).forEach((c) => rows.push(["    " + c, round2(p.revenueByCat[c])]));
-      rows.push(["Total Revenue", p.revenue]);
-      rows.push(["", ""]);
-      rows.push(["LESS: COST OF SALES", ""]);
-      Object.keys(p.cogsByCat).forEach((c) => rows.push(["    " + c, round2(p.cogsByCat[c])]));
-      rows.push(["Total Cost of Sales", p.cogs]);
-      rows.push(["GROSS PROFIT", p.grossProfit]);
-      rows.push(["", ""]);
-      rows.push(["LESS: OPERATING EXPENSES", ""]);
-      Object.keys(p.opexByCat).forEach((c) => rows.push(["    " + c, round2(p.opexByCat[c])]));
-      rows.push(["Total Operating Expenses", p.totalOpex]);
-      rows.push(["OPERATING PROFIT", p.operatingProfit]);
-      if (p.otherIncome) {
-        rows.push(["", ""]);
-        rows.push(["ADD: OTHER INCOME", ""]);
-        Object.keys(p.otherIncomeByCat).forEach((c) =>
-          rows.push(["    " + c, round2(p.otherIncomeByCat[c])]),
-        );
-        rows.push(["Total Other Income", p.otherIncome]);
-      }
-      rows.push(["NET PROFIT FOR THE PERIOD", p.netProfit]);
-      rows.push(["", ""]);
-      rows.push(["EXCLUDED FROM PROFIT (asset & equity movements)", ""]);
-      rows.push(["    Stock & raw material purchases", ex.asset_purchase]);
-      rows.push(["    Owner's capital introduced", ex.capital_in]);
-      rows.push(["    Owner's drawings", ex.capital_out]);
-      rows.push(["    Transfers between own accounts", ex.transfer]);
-      rows.push(["    Customer receipts against invoices already booked", ex.ar_collection]);
-      rows.push(["    Supplier bills settled", ex.ap_settlement]);
+      rows = pnlRows(p, ex);
       filename = "profit_or_loss_statement";
       title = "Profit or Loss Statement";
     } else if (key === "sfp") {
@@ -212,31 +197,29 @@ export function Reports({
         rawMaterials,
         salesOrders,
         purchaseOrders,
+        deliveryRuns,
         settings,
       });
       headers = [`Statement of Financial Position as at ${fmtDate(pos.asOf)}`, "Amount"];
-      rows = [["ASSETS", ""]];
-      pos.cashRows.forEach((c) => rows.push(["    " + c.name, c.balance]));
-      rows.push(["    Total Cash & Bank", pos.cash]);
-      rows.push(["    Trade Receivables", pos.receivables]);
-      rows.push(["    Inventory — Finished Goods (at cost)", pos.finishedGoods]);
-      rows.push(["    Inventory — Raw Materials (at cost)", pos.rawMaterialStock]);
-      rows.push(["TOTAL ASSETS", pos.totalAssets]);
-      rows.push(["", ""]);
-      rows.push(["LIABILITIES", ""]);
-      rows.push(["    Trade Payables (unpaid purchase orders)", pos.payables]);
-      rows.push(["Total Liabilities", pos.totalLiabilities]);
-      rows.push(["", ""]);
-      rows.push(["EQUITY", ""]);
-      rows.push(["    Opening Capital", pos.openingCapital]);
-      rows.push(["    Capital Introduced", pos.capitalIntroduced]);
-      rows.push(["    Owner's Drawings", round2(-pos.drawings)]);
-      rows.push(["    Retained Earnings (net profit to date)", pos.retained]);
-      rows.push(["    Opening Balance Equity (pre-system balances)", pos.openingBalanceEquity]);
-      rows.push(["Total Equity", pos.totalEquity]);
-      rows.push(["TOTAL LIABILITIES AND EQUITY", pos.totalLiabilitiesAndEquity]);
+      rows = positionRows(pos);
       filename = "statement_of_financial_position";
       title = "Statement of Financial Position";
+    } else if (key === "cash_flow") {
+      const cf = computeCashFlow({ ledger, cashAccounts: accs }, dateFrom, dateTo);
+      headers = ["Statement of Cash Flows", "Amount"];
+      rows = cashFlowRows(cf);
+      filename = "statement_of_cash_flows";
+      title = "Statement of Cash Flows";
+    } else if (key === "equity_changes") {
+      const eq = computeEquityChanges(
+        { ledger, cashAccounts: accs, products, rawMaterials, salesOrders, purchaseOrders, deliveryRuns, settings },
+        dateFrom,
+        dateTo,
+      );
+      headers = ["Statement of Changes in Equity", ...EQUITY_COLUMNS];
+      rows = equityRows(eq);
+      filename = "statement_of_changes_in_equity";
+      title = "Statement of Changes in Equity";
     } else if (key === "cash_book") {
       const accNameOf = (id) => {
         const a = accs.find((x) => x.id === id);
@@ -493,7 +476,7 @@ export function Reports({
       </div>
       <p className={`text-xs ${subText} -mt-3`}>
         {
-          "Date filters apply to reports with a date column (P&L, sales, raw material purchases/usage, delivery and daily expense reports). Daily, weekly, monthly and yearly figures can be produced by setting the range accordingly."
+          "Date filters apply to reports with a date column (P&L, cash flows, changes in equity, sales, raw material purchases/usage, delivery and daily expense reports). Daily, weekly, monthly and yearly figures can be produced by setting the range accordingly."
         }
       </p>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

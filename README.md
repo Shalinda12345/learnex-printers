@@ -48,8 +48,10 @@ Built with Next.js (App Router) and MySQL / MariaDB.
 `npm run test:db` builds the app, then runs it against a separate database whose name must end in
 `_test`. **The tests wipe that database.** By default it is `DATABASE_URL` + `_test`; set
 `TEST_DATABASE_URL` to keep it on a local server when `DATABASE_URL` points at a hosted database.
-It needs MySQL running and Chrome installed. Pass file names to run only some suites, e.g.
-`npm run test:db -- 06-sales 07-stock`.
+It needs MySQL running and Chrome installed (no Chrome? set `TEST_BROWSER_CHANNEL=msedge` to use
+Microsoft Edge instead). Pass file names to run only some suites, e.g.
+`npm run test:db -- 06-sales 07-stock`. `10-statements` is the end-to-end suite for the four
+financial statements (Profit or Loss, Financial Position, Cash Flows, Changes in Equity).
 
 ## Project layout
 

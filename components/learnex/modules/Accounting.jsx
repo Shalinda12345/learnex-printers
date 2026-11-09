@@ -4,20 +4,27 @@ import { LedgerBook } from "@/components/learnex/modules/LedgerBook";
 import { StatCard } from "@/components/learnex/ui";
 import {
   NON_PNL_LABEL,
+  computeCashFlow,
+  computeEquityChanges,
   computeFinancialPosition,
   computeNonPnL,
   computePnL,
   txnKind,
 } from "@/lib/learnex/accounting";
+import { EQUITY_COLUMNS, cashFlowRows, equityRows, pnlRows, positionRows } from "@/lib/learnex/statements";
 import { downloadCSV, exportPDF, fmtDate, money, rangePresets, round2, todayISO } from "@/lib/learnex/utils";
 
 /* =====================================================================
-   FINANCIAL STATEMENTS — a proper Profit or Loss statement followed by
-   the Statement of Financial Position, the way an accountant produces
-   them: revenue less cost of sales gives gross profit, less operating
-   expenses gives net profit, and that net profit is then carried into
-   the Statement of Financial Position as retained earnings.
+   FINANCIAL STATEMENTS — the four statements an accountant produces:
+   the Profit or Loss statement (revenue less cost of sales gives gross
+   profit, less operating expenses gives net profit), the Statement of
+   Financial Position (what the business owns and owes, with that net
+   profit carried in as retained earnings), the Statement of Cash Flows
+   (where the cash came from and went) and the Statement of Changes in
+   Equity (how the owner's stake moved).
 ===================================================================== */
+// A deduction or outflow is shown in brackets, an inflow plainly.
+const signedMoney = (v) => (v < 0 ? `(${money(-v)})` : money(v));
 export function StmtRow({ label, value, indent, bold, tone, dark, subText, top, note }) {
   const toneCls = tone === "pos" ? "text-emerald-600" : tone === "neg" ? "text-red-600" : "";
   return (
@@ -107,45 +114,14 @@ export function ProfitLossStatement({
   const othCats = Object.keys(pnl.otherIncomeByCat).sort(
     (a, b) => pnl.otherIncomeByCat[b] - pnl.otherIncomeByCat[a],
   );
-  function statementRows() {
-    const r = [];
-    r.push(["REVENUE", ""]);
-    revCats.forEach((c) => r.push(["   " + c, round2(pnl.revenueByCat[c])]));
-    r.push(["Total Revenue", pnl.revenue]);
-    r.push(["", ""]);
-    r.push(["LESS: COST OF SALES", ""]);
-    cogsCats.forEach((c) => r.push(["   " + c, round2(pnl.cogsByCat[c])]));
-    r.push(["Total Cost of Sales", pnl.cogs]);
-    r.push(["GROSS PROFIT", pnl.grossProfit]);
-    r.push(["", ""]);
-    r.push(["LESS: OPERATING EXPENSES", ""]);
-    opexCats.forEach((c) => r.push(["   " + c, round2(pnl.opexByCat[c])]));
-    r.push(["Total Operating Expenses", pnl.totalOpex]);
-    r.push(["OPERATING PROFIT", pnl.operatingProfit]);
-    if (pnl.otherIncome) {
-      r.push(["", ""]);
-      r.push(["ADD: OTHER INCOME", ""]);
-      othCats.forEach((c) => r.push(["   " + c, round2(pnl.otherIncomeByCat[c])]));
-      r.push(["Total Other Income", pnl.otherIncome]);
-    }
-    r.push(["NET PROFIT FOR THE PERIOD", pnl.netProfit]);
-    r.push(["", ""]);
-    r.push(["Excluded from profit (asset & equity movements)", ""]);
-    r.push(["   Stock & raw material purchases (paid from cash account)", excluded.asset_purchase]);
-    r.push(["   Owner's capital introduced", excluded.capital_in]);
-    r.push(["   Owner's drawings", excluded.capital_out]);
-    r.push(["   Transfers between own accounts", excluded.transfer]);
-    r.push(["   Customer receipts against invoices already booked", excluded.ar_collection]);
-    r.push(["   Supplier bills settled", excluded.ap_settlement]);
-    return r;
-  }
   function doExport(fmt) {
     const headers = ["Profit or Loss Statement — " + periodLabel, "Amount"];
+    const rows = pnlRows(pnl, excluded);
     if (fmt === "pdf") {
-      exportPDF(`Profit or Loss Statement (${periodLabel})`, headers, statementRows());
+      exportPDF(`Profit or Loss Statement (${periodLabel})`, headers, rows);
       setToast("Statement opened — use your browser's print dialog to save as PDF.");
     } else {
-      downloadCSV("profit_or_loss_statement.csv", [headers, ...statementRows()]);
+      downloadCSV("profit_or_loss_statement.csv", [headers, ...rows]);
       setToast("Profit or Loss statement exported as CSV.");
     }
   }
@@ -171,7 +147,7 @@ export function ProfitLossStatement({
         />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Revenue" value={money(pnl.revenue)} cardBg={cardBg} subText={subText} />
+        <StatCard label="Revenue" value={money(pnl.netRevenue)} cardBg={cardBg} subText={subText} />
         <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
           <p className={`text-xs ${subText}`}>Gross Profit</p>
           <p
@@ -242,9 +218,19 @@ export function ProfitLossStatement({
               dark={dark}
             />
           ))}
+          {pnl.salesReturns > 0 && (
+            <StmtRow
+              label="Less: Sales Returns"
+              value={`(${money(pnl.salesReturns)})`}
+              indent={true}
+              subText={subText}
+              dark={dark}
+              note="Money refunded to customers, or taken off their invoices, for goods they brought back."
+            />
+          )}
           <StmtRow
             label="Total Revenue"
-            value={money(pnl.revenue)}
+            value={money(pnl.netRevenue)}
             bold={true}
             top={true}
             subText={subText}
@@ -363,6 +349,14 @@ export function ProfitLossStatement({
           note={"Cash goes down, inventory goes up by the same amount — so profit is untouched."}
         />
         <StmtRow
+          label="Fixed asset purchases"
+          value={money(excluded.fixed_asset)}
+          indent={true}
+          subText={subText}
+          dark={dark}
+          note={"Equipment bought — a non-current asset. Cash goes down and the asset goes up."}
+        />
+        <StmtRow
           label="Owner's capital introduced"
           value={money(excluded.capital_in)}
           indent={true}
@@ -372,6 +366,21 @@ export function ProfitLossStatement({
         <StmtRow
           label="Owner's drawings"
           value={money(excluded.capital_out)}
+          indent={true}
+          subText={subText}
+          dark={dark}
+        />
+        <StmtRow
+          label="Loans received"
+          value={money(excluded.loan_in)}
+          indent={true}
+          subText={subText}
+          dark={dark}
+          note={"Borrowed money is a liability that has to be repaid — it is not income."}
+        />
+        <StmtRow
+          label="Loans repaid"
+          value={money(excluded.loan_out)}
           indent={true}
           subText={subText}
           dark={dark}
@@ -447,6 +456,7 @@ export function FinancialPosition({
   rawMaterials,
   salesOrders,
   purchaseOrders,
+  deliveryRuns,
   settings,
 }) {
   const pos = useMemo(
@@ -458,40 +468,19 @@ export function FinancialPosition({
         rawMaterials,
         salesOrders,
         purchaseOrders,
+        deliveryRuns,
         settings,
       }),
-    [ledger, cashAccounts, products, rawMaterials, salesOrders, purchaseOrders, settings],
+    [ledger, cashAccounts, products, rawMaterials, salesOrders, purchaseOrders, deliveryRuns, settings],
   );
-  function rows() {
-    const r = [["ASSETS", ""]];
-    pos.cashRows.forEach((c) => r.push(["   " + c.name, c.balance]));
-    r.push(["   Total Cash & Bank", pos.cash]);
-    r.push(["   Trade Receivables", pos.receivables]);
-    r.push(["   Inventory — Finished Goods (at cost)", pos.finishedGoods]);
-    r.push(["   Inventory — Raw Materials (at cost)", pos.rawMaterialStock]);
-    r.push(["TOTAL ASSETS", pos.totalAssets]);
-    r.push(["", ""]);
-    r.push(["LIABILITIES", ""]);
-    r.push(["   Trade Payables (unpaid purchase orders)", pos.payables]);
-    r.push(["Total Liabilities", pos.totalLiabilities]);
-    r.push(["", ""]);
-    r.push(["EQUITY", ""]);
-    r.push(["   Opening Capital", pos.openingCapital]);
-    r.push(["   Capital Introduced", pos.capitalIntroduced]);
-    r.push(["   Owner's Drawings", -pos.drawings]);
-    r.push(["   Retained Earnings (net profit to date)", pos.retained]);
-    r.push(["   Opening Balance Equity (pre-system balances)", pos.openingBalanceEquity]);
-    r.push(["Total Equity", pos.totalEquity]);
-    r.push(["TOTAL LIABILITIES AND EQUITY", pos.totalLiabilitiesAndEquity]);
-    return r;
-  }
   function doExport(fmt) {
     const headers = [`Statement of Financial Position as at ${fmtDate(pos.asOf)}`, "Amount"];
+    const rows = positionRows(pos);
     if (fmt === "pdf") {
-      exportPDF(`Statement of Financial Position as at ${fmtDate(pos.asOf)}`, headers, rows());
+      exportPDF(`Statement of Financial Position as at ${fmtDate(pos.asOf)}`, headers, rows);
       setToast("Statement opened — use your browser's print dialog to save as PDF.");
     } else {
-      downloadCSV("statement_of_financial_position.csv", [headers, ...rows()]);
+      downloadCSV("statement_of_financial_position.csv", [headers, ...rows]);
       setToast("Statement of Financial Position exported as CSV.");
     }
   }
@@ -552,6 +541,24 @@ export function FinancialPosition({
         <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm`}>
           <h3 className="font-bold text-base mb-1">Assets</h3>
           <p className={`text-xs ${subText} mb-2`}>Everything the business owns</p>
+          <StmtSection title="Non-current Assets" subText={subText}>
+            <StmtRow
+              label="Property, Plant & Equipment (at cost)"
+              value={money(pos.ppe)}
+              indent={true}
+              subText={subText}
+              dark={dark}
+              note="Equipment and other fixed assets bought, recorded as Fixed Asset Purchase. Kept at cost — depreciation is not recorded yet."
+            />
+            <StmtRow
+              label="Total Non-current Assets"
+              value={money(pos.nonCurrentAssets)}
+              bold={true}
+              top={true}
+              subText={subText}
+              dark={dark}
+            />
+          </StmtSection>
           <StmtSection title="Current Assets" subText={subText}>
             {pos.cashRows.map((c) => (
               <StmtRow
@@ -597,6 +604,22 @@ export function FinancialPosition({
                 "Valued at weighted average cost — the blended cost of the stock actually on hand. This is where your raw material purchases live, as an asset, until the materials are consumed or sold."
               }
             />
+            <StmtRow
+              label={"Inventory — Stock out on Delivery Runs (at cost)"}
+              value={money(pos.stockOnRuns)}
+              indent={true}
+              subText={subText}
+              dark={dark}
+              note="Goods taken out on a delivery run that is still open. They have left the shelf but are not sold until the run is closed."
+            />
+            <StmtRow
+              label="Total Current Assets"
+              value={money(pos.currentAssets)}
+              bold={true}
+              top={true}
+              subText={subText}
+              dark={dark}
+            />
           </StmtSection>
           <div
             className={`mt-3 pt-3 border-t ${dark ? "border-slate-700" : "border-slate-200"} flex items-center justify-between`}
@@ -608,7 +631,25 @@ export function FinancialPosition({
         <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm`}>
           <h3 className="font-bold text-base mb-1">{"Liabilities & Equity"}</h3>
           <p className={`text-xs ${subText} mb-2`}>How those assets are funded</p>
-          <StmtSection title="Liabilities" subText={subText}>
+          <StmtSection title="Non-current Liabilities" subText={subText}>
+            <StmtRow
+              label="Loans Payable"
+              value={money(pos.loans)}
+              indent={true}
+              subText={subText}
+              dark={dark}
+              note="Loans received less loans repaid, recorded from Cash & Bank. Shown in full as non-current."
+            />
+            <StmtRow
+              label="Total Non-current Liabilities"
+              value={money(pos.nonCurrentLiabilities)}
+              bold={true}
+              top={true}
+              subText={subText}
+              dark={dark}
+            />
+          </StmtSection>
+          <StmtSection title="Current Liabilities" subText={subText}>
             <StmtRow
               label="Trade Payables"
               value={money(pos.payables)}
@@ -620,14 +661,20 @@ export function FinancialPosition({
               }
             />
             <StmtRow
-              label="Total Liabilities"
-              value={money(pos.totalLiabilities)}
+              label="Total Current Liabilities"
+              value={money(pos.currentLiabilities)}
               bold={true}
               top={true}
               subText={subText}
               dark={dark}
             />
           </StmtSection>
+          <div
+            className={`mt-3 pt-3 border-t ${dark ? "border-slate-700" : "border-slate-200"} flex items-center justify-between`}
+          >
+            <span className="font-bold">Total Liabilities</span>
+            <span className="font-bold">{money(pos.totalLiabilities)}</span>
+          </div>
           <StmtSection title="Equity" subText={subText}>
             <StmtRow
               label="Opening Capital"
@@ -709,6 +756,410 @@ export function FinancialPosition({
     </div>
   );
 }
+// Export buttons shared by the statements below.
+function ExportButtons({ onExport, dark }) {
+  const cls = `text-xs font-medium flex items-center gap-1 ${dark ? "text-blue-400" : "text-blue-600"}`;
+  return (
+    <div className="flex gap-3">
+      <button onClick={() => onExport("csv")} className={cls}>
+        <Download size={12} />
+        {" CSV"}
+      </button>
+      <button onClick={() => onExport("pdf")} className={cls}>
+        <Printer size={12} />
+        {" Print / PDF"}
+      </button>
+    </div>
+  );
+}
+// Shown in place of a statement when the start date is after the end date.
+// (Same look as the other warnings in the app: this app's stylesheet is a fixed
+// list of classes, so only classes already in it can be used.)
+function BackwardsRange({ cardBg, subText }) {
+  return (
+    <div className={`rounded-2xl border p-4 ${cardBg} shadow-sm`}>
+      <div className="flex items-start gap-2">
+        <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-sm font-medium">The start date is after the end date.</p>
+          <p className={`text-xs ${subText} mt-1`}>Choose an end date on or after the start date.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+// "All time (up to today)" or "Mar 1 to Mar 31".
+const cashPeriodLabel = (from, to) =>
+  !from && !to
+    ? "All time (up to today)"
+    : `${from ? fmtDate(from) : "the beginning"} to ${to ? fmtDate(to) : fmtDate(todayISO())}`;
+
+export function CashFlowStatement({
+  dark,
+  cardBg,
+  subText,
+  setToast,
+  ledger,
+  cashAccounts,
+  settings,
+}) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const cf = useMemo(
+    () => computeCashFlow({ ledger, cashAccounts }, from, to),
+    [ledger, cashAccounts, from, to],
+  );
+  const periodLabel = cashPeriodLabel(from, to);
+  const backwards = !!from && !!to && from > to;
+  const o = cf.operating,
+    inv = cf.investing,
+    fin = cf.financing,
+    rec = cf.reconciliation;
+  function doExport(fmt) {
+    const headers = ["Statement of Cash Flows — " + periodLabel, "Amount"];
+    const rows = cashFlowRows(cf);
+    if (fmt === "pdf") {
+      exportPDF(`Statement of Cash Flows (${periodLabel})`, headers, rows);
+      setToast("Statement opened — use your browser's print dialog to save as PDF.");
+    } else {
+      downloadCSV("statement_of_cash_flows.csv", [headers, ...rows]);
+      setToast("Statement of Cash Flows exported as CSV.");
+    }
+  }
+  const row = (label, value, extra = {}) => (
+    <StmtRow
+      key={label}
+      label={label}
+      value={signedMoney(value)}
+      indent={!extra.bold}
+      subText={subText}
+      dark={dark}
+      tone={extra.tone}
+      {...extra}
+    />
+  );
+  const tone = (v) => (v >= 0 ? "pos" : "neg");
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Statement of Cash Flows</h3>
+          <p className={`text-xs ${subText}`}>
+            {"Where the cash came from and where it went, for "}
+            {periodLabel}
+            {" — every movement through your Cash & Bank accounts"}
+          </p>
+        </div>
+        <DateRangeBar
+          from={from}
+          to={to}
+          setFrom={setFrom}
+          setTo={setTo}
+          dark={dark}
+          subText={subText}
+          presets={rangePresets()}
+        />
+      </div>
+      {backwards ? (
+        <BackwardsRange cardBg={cardBg} subText={subText} />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard
+              label="Cash from Operations"
+              value={signedMoney(o.net)}
+              valueClass={o.net >= 0 ? "text-emerald-600" : "text-red-600"}
+              cardBg={cardBg}
+              subText={subText}
+            />
+            <StatCard
+              label="Cash from Investing"
+              value={signedMoney(inv.net)}
+              valueClass={inv.net >= 0 ? "" : "text-red-600"}
+              cardBg={cardBg}
+              subText={subText}
+            />
+            <StatCard
+              label="Cash from Financing"
+              value={signedMoney(fin.net)}
+              valueClass={fin.net >= 0 ? "" : "text-red-600"}
+              cardBg={cardBg}
+              subText={subText}
+            />
+            <StatCard
+              label="Net Change in Cash"
+              value={signedMoney(cf.netChange)}
+              valueClass={cf.netChange >= 0 ? "text-emerald-600" : "text-red-600"}
+              cardBg={cardBg}
+              subText={subText}
+            />
+          </div>
+          <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm`}>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h3 className="font-bold text-base">{(settings && settings.businessName) || "Business"}</h3>
+                <p className={`text-xs ${subText}`}>
+                  {"Statement of Cash Flows — "}
+                  {periodLabel}
+                </p>
+              </div>
+              <ExportButtons onExport={doExport} dark={dark} />
+            </div>
+            <StmtSection title="Cash Flows from Operating Activities" subText={subText}>
+              {row("Cash received from customers", o.fromCustomers, {
+                note: "Sales paid in cash, bank or card, and money collected against credit invoices.",
+              })}
+              {row("Other income received", o.otherIncome)}
+              {row("Refunds paid to customers", o.refunds, {
+                note: "Cash handed back for returned goods.",
+              })}
+              {row("Paid for stock and raw materials", o.paidForStock)}
+              {row("Supplier bills settled", o.supplierBills, {
+                note: "Payments against purchases made on credit earlier.",
+              })}
+              {row("Operating expenses paid", o.expenses)}
+              {row("Net Cash from Operating Activities", o.net, { bold: true, top: true, tone: tone(o.net) })}
+            </StmtSection>
+            <StmtSection title="Cash Flows from Investing Activities" subText={subText}>
+              {row("Purchase of property, plant and equipment", inv.fixedAssets)}
+              {row("Net Cash used in Investing Activities", inv.net, { bold: true, top: true, tone: tone(inv.net) })}
+            </StmtSection>
+            <StmtSection title="Cash Flows from Financing Activities" subText={subText}>
+              {row("Owner's capital introduced", fin.capitalIntroduced)}
+              {row("Owner's drawings", fin.drawings)}
+              {row("Loans received", fin.loansReceived)}
+              {row("Loans repaid", fin.loansRepaid)}
+              {row("Net Cash from Financing Activities", fin.net, { bold: true, top: true, tone: tone(fin.net) })}
+            </StmtSection>
+            <div className={`mt-4 pt-3 border-t ${dark ? "border-slate-700" : "border-slate-200"}`}>
+              {cf.transfers !== 0 &&
+                row("Transfers between own accounts (net — should be nil)", cf.transfers, {
+                  note: "Moving money between your own accounts nets to nothing. A balance here means one side of a transfer is missing.",
+                })}
+              {row("Net Increase / (Decrease) in Cash", cf.netChange, { bold: true, tone: tone(cf.netChange) })}
+              {row("Cash at the start of the period", cf.openingCash, { indent: false })}
+              {row("Cash at the end of the period", cf.closingCash, { bold: true, top: true })}
+              {cf.accounts.map((a) => (
+                <StmtRow
+                  key={a.id}
+                  label={a.name}
+                  value={signedMoney(a.closing)}
+                  indent={true}
+                  subText={subText}
+                  dark={dark}
+                  tone={a.closing < 0 ? "neg" : undefined}
+                />
+              ))}
+              <div className="flex items-center gap-2 mt-3">
+                {cf.agrees ? (
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                ) : (
+                  <AlertTriangle size={14} className="text-amber-500" />
+                )}
+                <span className={`text-xs ${subText}`}>
+                  {cf.agrees
+                    ? `Agrees with the Cash & Bank balances (${money(cf.balancesTotal)}).`
+                    : `Does not agree with the Cash & Bank balances (${money(cf.balancesTotal)}) — a ledger line is missing a date or sits on an account that no longer exists.`}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm`}>
+            <h3 className="font-bold text-base mb-1">Why profit and cash are different</h3>
+            <p className={`text-xs ${subText} mb-2`}>
+              Net profit counts a sale when it is made and a cost when the stock is sold; cash only counts money
+              that actually moved.
+            </p>
+            <StmtSection title="Net Profit to Cash from Operations" subText={subText}>
+              {row("Net profit for the period", rec.netProfit, { tone: tone(rec.netProfit) })}
+              {row("Decrease / (increase) in trade receivables", rec.receivables, {
+                note: "Sales on credit are profit but not yet cash; money collected from customers is cash that was already counted as profit.",
+              })}
+              {row("Decrease / (increase) in inventory, net of trade payables", rec.inventoryAndPayables, {
+                note: "Stock sold is a cost with no cash going out now; stock bought and supplier bills paid are cash going out that never touched profit.",
+              })}
+              {row("Net Cash from Operations", rec.netOperating, { bold: true, top: true, tone: tone(rec.netOperating) })}
+            </StmtSection>
+            <div className="flex items-center gap-2 mt-3">
+              {rec.agrees ? (
+                <CheckCircle2 size={14} className="text-emerald-500" />
+              ) : (
+                <AlertTriangle size={14} className="text-amber-500" />
+              )}
+              <span className={`text-xs ${subText}`}>
+                {rec.agrees
+                  ? "Agrees with the net cash from operating activities above."
+                  : "Does not agree with the net cash from operating activities above."}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function EquityStatement({
+  dark,
+  cardBg,
+  subText,
+  hoverRow,
+  setToast,
+  ledger,
+  cashAccounts,
+  products,
+  rawMaterials,
+  salesOrders,
+  purchaseOrders,
+  deliveryRuns,
+  settings,
+}) {
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const eq = useMemo(
+    () =>
+      computeEquityChanges(
+        { ledger, cashAccounts, products, rawMaterials, salesOrders, purchaseOrders, deliveryRuns, settings },
+        from,
+        to,
+      ),
+    [ledger, cashAccounts, products, rawMaterials, salesOrders, purchaseOrders, deliveryRuns, settings, from, to],
+  );
+  const periodLabel = cashPeriodLabel(from, to);
+  const backwards = !!from && !!to && from > to;
+  const rows = equityRows(eq);
+  function doExport(fmt) {
+    const headers = ["Statement of Changes in Equity — " + periodLabel, ...EQUITY_COLUMNS];
+    if (fmt === "pdf") {
+      exportPDF(`Statement of Changes in Equity (${periodLabel})`, headers, rows);
+      setToast("Statement opened — use your browser's print dialog to save as PDF.");
+    } else {
+      downloadCSV("statement_of_changes_in_equity.csv", [headers, ...rows]);
+      setToast("Statement of Changes in Equity exported as CSV.");
+    }
+  }
+  // A blank cell stays blank; a number is shown as money, negatives in brackets.
+  const cell = (v) => (v === "" ? "" : signedMoney(v));
+  const border = dark ? "border-slate-800" : "border-slate-100";
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">Statement of Changes in Equity</h3>
+          <p className={`text-xs ${subText}`}>
+            {"How the owner's stake in the business moved over "}
+            {periodLabel}
+          </p>
+        </div>
+        <DateRangeBar
+          from={from}
+          to={to}
+          setFrom={setFrom}
+          setTo={setTo}
+          dark={dark}
+          subText={subText}
+          presets={rangePresets()}
+        />
+      </div>
+      {backwards ? (
+        <BackwardsRange cardBg={cardBg} subText={subText} />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard label="Opening Equity" value={signedMoney(eq.opening.total)} cardBg={cardBg} subText={subText} />
+            <StatCard
+              label="Profit for the Period"
+              value={signedMoney(eq.profit)}
+              valueClass={eq.profit >= 0 ? "text-emerald-600" : "text-red-600"}
+              cardBg={cardBg}
+              subText={subText}
+            />
+            <StatCard
+              label="Capital less Drawings"
+              value={signedMoney(round2(eq.introduced - eq.drawings))}
+              valueClass={eq.introduced - eq.drawings >= 0 ? "" : "text-red-600"}
+              cardBg={cardBg}
+              subText={subText}
+            />
+            <StatCard
+              label="Closing Equity"
+              value={signedMoney(eq.closing.total)}
+              valueClass="text-emerald-600"
+              cardBg={cardBg}
+              subText={subText}
+            />
+          </div>
+          <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm`}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-bold text-base">{(settings && settings.businessName) || "Business"}</h3>
+                <p className={`text-xs ${subText}`}>
+                  {"Statement of Changes in Equity — "}
+                  {periodLabel}
+                </p>
+              </div>
+              <ExportButtons onExport={doExport} dark={dark} />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className={`text-left ${subText} text-xs border-t ${border}`}>
+                    <th className="font-medium py-2 px-2" />
+                    {EQUITY_COLUMNS.map((c) => (
+                      <th key={c} className="font-medium py-2 px-2 text-right">
+                        {c}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => {
+                    const balance = i === 0 || i === rows.length - 1;
+                    return (
+                      <tr key={r[0]} className={`border-t ${border} ${hoverRow}`}>
+                        <td className={`py-2.5 px-2 ${balance ? "font-semibold" : "pl-5"}`}>{r[0]}</td>
+                        {r.slice(1).map((v, j) => (
+                          <td
+                            key={j}
+                            className={`py-2.5 px-2 text-right whitespace-nowrap ${balance || j === 3 ? "font-semibold" : ""}`}
+                          >
+                            {cell(v)}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              {eq.agreesWithPosition === false ? (
+                <AlertTriangle size={14} className="text-amber-500" />
+              ) : (
+                <CheckCircle2 size={14} className="text-emerald-500" />
+              )}
+              <span className={`text-xs ${subText}`}>
+                {eq.agreesWithPosition === null
+                  ? "Closing equity is shown as at the end date. Opening balance equity does not move, so it is shown at its current value."
+                  : eq.agreesWithPosition
+                    ? "Closing equity agrees with Total Equity on the Statement of Financial Position."
+                    : "Closing equity does not agree with Total Equity on the Statement of Financial Position."}
+              </span>
+            </div>
+          </div>
+          <div className={`rounded-2xl border p-5 ${cardBg} shadow-sm`}>
+            <h3 className="font-semibold mb-2">How to read this</h3>
+            <p className={`text-sm ${subText} leading-relaxed`}>
+              {
+                "Capital is what the owner has put in (opening capital and capital introduced) less what has been taken out as drawings. Retained earnings is the profit the business has kept. Opening balance equity is the stock, cash and balances that already existed before these books began. When profit is larger than drawings, the owner's stake grows."
+              }
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 export function Accounting(props) {
   const [tab, setTab] = useState("ledger");
   const { dark, subText } = props;
@@ -716,14 +1167,17 @@ export function Accounting(props) {
     { key: "ledger", label: "Ledger & Overview" },
     { key: "pnl", label: "Profit or Loss" },
     { key: "position", label: "Statement of Financial Position" },
+    { key: "cashflow", label: "Statement of Cash Flows" },
+    { key: "equity", label: "Statement of Changes in Equity" },
   ];
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold">Accounting</h1>
         <p className={`text-sm ${subText}`}>
-          Income and expenses flow into the Profit or Loss statement; asset and equity movements flow into the
-          Statement of Financial Position.
+          Income and expenses flow into the Profit or Loss statement; asset, loan and equity movements flow into
+          the Statement of Financial Position; the Statements of Cash Flows and Changes in Equity show how cash
+          and the owner&apos;s stake moved.
         </p>
       </div>
       <div className="flex gap-2 flex-wrap">
@@ -740,6 +1194,8 @@ export function Accounting(props) {
       {tab === "ledger" && <LedgerBook {...props} />}
       {tab === "pnl" && <ProfitLossStatement {...props} />}
       {tab === "position" && <FinancialPosition {...props} />}
+      {tab === "cashflow" && <CashFlowStatement {...props} />}
+      {tab === "equity" && <EquityStatement {...props} />}
     </div>
   );
 }

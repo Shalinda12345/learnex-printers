@@ -85,6 +85,7 @@ try {
     "07-stock",
     "08-finance",
     "09-admin",
+    "10-statements",
     "04-limitations",
   ];
   const only = process.argv.slice(2);
