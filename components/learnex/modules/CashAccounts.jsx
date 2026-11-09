@@ -286,8 +286,8 @@ export function CashAccounts({
         `${money(amount)} transferred to ${accName(toAcc)}. Profit is unaffected — this is only a movement of your own cash.`,
       );
     } else if (mode === "in") {
-      const kind =
-        source === "Owner Capital" ? "capital_in" : source === "Loan Received" ? "ar_collection" : "revenue";
+      // Owner Capital -> capital_in, Loan Received -> loan_in, anything else is income.
+      const kind = txnKind({ type: "Income", category: source });
       additions = [
         makeCashTxn({
           ledger,
@@ -303,7 +303,8 @@ export function CashAccounts({
       ];
       setToast(`${money(amount)} recorded into ${accName(toAcc)} as ${source}.`);
     } else {
-      const kind = source === "Owner Drawings" ? "capital_out" : "ap_settlement";
+      // Owner Drawings -> capital_out, Loan Repayment -> loan_out, Supplier Payment -> ap_settlement.
+      const kind = txnKind({ type: "Expense", category: source });
       additions = [
         makeCashTxn({
           ledger,

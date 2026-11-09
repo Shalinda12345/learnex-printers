@@ -345,7 +345,7 @@ describe("Cash & Bank", () => {
       ]),
       [
         ["Income", "Other Income", 75, "BANK-MAIN", "revenue", "Other Income received"],
-        ["Income", "Loan Received", 500, "BANK-MAIN", "ar_collection", "Loan Received received"],
+        ["Income", "Loan Received", 500, "BANK-MAIN", "loan_in", "Loan Received received"],
         ["Income", "Owner Capital", 2000, "BANK-MAIN", "capital_in", "Owner Capital received"],
       ],
     );
@@ -371,7 +371,7 @@ describe("Cash & Bank", () => {
     assert.deepEqual(
       s.ledger.map(({ type, category, amount, kind }) => [type, category, amount, kind]),
       [
-        ["Expense", "Loan Repayment", 60, "ap_settlement"],
+        ["Expense", "Loan Repayment", 60, "loan_out"],
         ["Expense", "Supplier Payment", 40, "ap_settlement"],
         ["Expense", "Owner Drawings", 300, "capital_out"],
       ],

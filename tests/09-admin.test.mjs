@@ -52,11 +52,12 @@ describe("Settings", () => {
   test("SET-1 the business profile is saved; the currency symbol changes everywhere", async () => {
     const page = await openApp(browser);
     await settingsTab(page, "Business Profile");
-    const inputs = page.locator("main input");
-    await inputs.nth(0).fill("Hashil Traders");
-    await inputs.nth(1).fill("12.5");
-    await inputs.nth(2).fill("1000");
-    await page.locator("main select").selectOption("USD ($)");
+    // by label, not by position: the profile also has address, phone, email and invoice-note fields
+    const main = page.locator("main");
+    await field(main, "Business Name").fill("Hashil Traders");
+    await field(main, "Default Tax Rate (%)").fill("12.5");
+    await field(main, "Opening Capital").fill("1000");
+    await field(main, "Currency").selectOption("USD ($)");
     await page.getByRole("button", { name: "Save Changes" }).click();
     const message = await toast(page).innerText();
     await waitSaved(page);
