@@ -196,8 +196,10 @@ export const log = (...args) => console.log("      ·", ...args);
 
 /* ------------------------------------------------------------- browser */
 
+// Chrome by default; set TEST_BROWSER_CHANNEL=msedge to use Microsoft Edge
+// (preinstalled on Windows) on a PC that has no Chrome.
 export async function launchBrowser() {
-  return chromium.launch({ channel: "chrome", headless: true });
+  return chromium.launch({ channel: process.env.TEST_BROWSER_CHANNEL || "chrome", headless: true });
 }
 
 /**
@@ -224,7 +226,9 @@ export async function newPage(browser, { base = BASE, client = base === BASE ? d
     if (m.type() === "error" || m.type() === "warning")
       page.consoleProblems.push(`console.${m.type()}: ${m.text()}`);
   });
-  page.on("dialog", (d) => (d.type() === "beforeunload" ? undefined : d.accept()));
+  // A dialog can still be open when a test closes its page; accepting it then
+  // rejects with TargetClosedError, which must not escape as an unhandled rejection.
+  page.on("dialog", (d) => (d.type() === "beforeunload" ? undefined : d.accept().catch(() => {})));
   return page;
 }
 

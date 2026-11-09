@@ -133,17 +133,17 @@ describe("classifying ledger lines", () => {
       Inventory: "asset_purchase",
       "Stock Purchase": "asset_purchase",
       "Raw Material Purchase": "asset_purchase",
-      "Fixed Asset Purchase": "asset_purchase",
+      "Fixed Asset Purchase": "fixed_asset", // equipment is a non-current asset, not stock
       "Owner Capital": "capital_in",
       "Capital Introduced": "capital_in",
       "Owner Drawings": "capital_out",
       Drawings: "capital_out",
       "Cash Transfer": "transfer",
       "Receivable Collection": "ar_collection",
-      "Loan Received": "ar_collection",
+      "Loan Received": "loan_in", // a loan is a liability, not a customer receipt
       "Supplier Payment": "ap_settlement",
       "Payable Settlement": "ap_settlement",
-      "Loan Repayment": "ap_settlement",
+      "Loan Repayment": "loan_out", // repaying a loan is not a supplier payment
       "Cost of Goods Sold": "cogs",
       "Raw Materials Consumed": "cogs",
     };
@@ -179,8 +179,11 @@ describe("classifying ledger lines", () => {
   test("ACCT-5 every non-profit kind has a label explaining where it goes", () => {
     for (const kind of [
       "asset_purchase",
+      "fixed_asset",
       "capital_in",
       "capital_out",
+      "loan_in",
+      "loan_out",
       "transfer",
       "ar_collection",
       "ap_settlement",
@@ -207,7 +210,9 @@ describe("classifying ledger lines", () => {
   test("ACCT-8 every category offered in the ledger form is classified as intended", () => {
     assert.ok(INCOME_CATEGORIES.includes("Sales") && EXPENSE_CATEGORIES.includes("Rent"));
     assert.equal(txnKind({ type: "Income", category: "Owner Capital" }), "capital_in");
-    assert.equal(txnKind({ type: "Expense", category: "Fixed Asset Purchase" }), "asset_purchase");
+    assert.equal(txnKind({ type: "Expense", category: "Fixed Asset Purchase" }), "fixed_asset");
+    assert.equal(txnKind({ type: "Income", category: "Loan Received" }), "loan_in");
+    assert.equal(txnKind({ type: "Expense", category: "Loan Repayment" }), "loan_out");
   });
 });
 
@@ -274,8 +279,11 @@ describe("Profit or Loss statement", () => {
       { ...ex, lines: ex.lines.length },
       {
         asset_purchase: 300,
+        fixed_asset: 0,
         capital_in: 5000,
         capital_out: 200,
+        loan_in: 0,
+        loan_out: 0,
         transfer: 200,
         ar_collection: 50,
         ap_settlement: 80,

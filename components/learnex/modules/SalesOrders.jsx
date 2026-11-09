@@ -232,6 +232,91 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
     </Modal>
   );
 }
+// What happens to goods a customer brings back.
+const RETURN_STOCK = "stock";
+const RETURN_EXPENSE = "expense";
+const RETURN_OPTIONS = [
+  { value: RETURN_STOCK, label: "Add to stock again" },
+  { value: RETURN_EXPENSE, label: "Add to expenses (damaged / not resellable)" },
+];
+export function ReturnModal({ order, onClose, onSave, dark, cardBg, subText, inputBg }) {
+  const lines = order.lineItems || [];
+  const [lineIdx, setLineIdx] = useState(0);
+  const [qty, setQty] = useState(1);
+  const [disposition, setDisposition] = useState(RETURN_STOCK);
+  const line = lines[lineIdx];
+  const qtyN = Math.floor(Number(qty) || 0);
+  const taxRatio = order.tax > 0 && order.amount - order.tax > 0 ? order.tax / (order.amount - order.tax) : 0;
+  const refund = line ? round2(line.price * qtyN * (1 + taxRatio)) : 0;
+  function submit(e) {
+    e.preventDefault();
+    if (!line || qtyN < 1 || qtyN > line.qty) return;
+    onSave({ lineIdx, qty: qtyN, disposition });
+  }
+  return (
+    <Modal title={`Return — Order ${order.id}`} onClose={onClose} cardBg={cardBg} dark={dark}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Returned Item" subText={subText}>
+          <select
+            value={lineIdx}
+            onChange={(e) => {
+              setLineIdx(Number(e.target.value));
+              setQty(1);
+            }}
+            className={inputCls(inputBg)}
+          >
+            {lines.map((li, i) => (
+              <option key={i} value={i}>
+                {li.name} ({li.qty} on this order)
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Return Quantity" subText={subText}>
+          <input
+            type="number"
+            min="1"
+            max={line ? line.qty : 1}
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            className={inputCls(inputBg)}
+          />
+          {line && qtyN > line.qty && (
+            <p className="text-[11px] text-red-600 font-medium mt-0.5">Only {line.qty} on this order.</p>
+          )}
+        </Field>
+        <Field label="Returns" subText={subText}>
+          <select value={disposition} onChange={(e) => setDisposition(e.target.value)} className={inputCls(inputBg)}>
+            {RETURN_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <p className={`text-xs ${subText}`}>
+          {disposition === RETURN_STOCK
+            ? "The items go back into stock and their cost is taken out of cost of goods sold."
+            : "The items are not restocked; their cost is booked as an expense."}
+          {" The returned amount is reduced from this sales order."}
+        </p>
+        <div
+          className={`flex justify-between items-center pt-3 border-t ${dark ? "border-slate-800" : "border-slate-100"} text-sm`}
+        >
+          <span className={subText}>Amount reduced from order</span>
+          <span className="text-lg font-bold">{money(refund)}</span>
+        </div>
+        <button
+          type="submit"
+          disabled={!line || qtyN < 1 || qtyN > line.qty}
+          className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md transition-colors disabled:opacity-40"
+        >
+          {" Record Return"}
+        </button>
+      </form>
+    </Modal>
+  );
+}
 export function SalesOrders({
   dark,
   cardBg,
@@ -255,6 +340,7 @@ export function SalesOrders({
   const [selected, setSelected] = useState(null);
   const [kindFilter, setKindFilter] = useState("All orders");
   const [payAmt, setPayAmt] = useState("");
+  const [returnOrder, setReturnOrder] = useState(null);
   const statuses = ["All", "Processing", "Shipped", "Delivered", "Cancelled"];
   const kinds = ["All orders", "Credit bills", "Outstanding balance"];
   const filtered = salesOrders.filter(
@@ -437,6 +523,113 @@ export function SalesOrders({
     setLedger((prev) => [...additions, ...prev]);
     setToast(`Sales order ${soId} created for ${customer.name} — ${money(total)}.`);
     setModalOpen(false);
+  }
+  function returnItems(o, { lineIdx, qty, disposition }) {
+    const li = (o.lineItems || [])[lineIdx];
+    if (!li || qty < 1 || qty > li.qty) return;
+    const date = todayISO();
+    const taxRatio = o.tax > 0 && o.amount - o.tax > 0 ? o.tax / (o.amount - o.tax) : 0;
+    const goods = round2(li.price * qty);
+    const refund = Math.min(o.amount, round2(goods * (1 + taxRatio)));
+    const newAmount = round2(o.amount - refund);
+    const paid = paidOf(o);
+    const balBefore = balOf(o);
+    const newPaid = Math.min(paid, newAmount);
+    const cashRefund = round2(paid - newPaid); // already-collected money handed back
+    const balDrop = round2(Math.min(refund, balBefore)); // unpaid part simply cancelled
+    const lineItems = o.lineItems
+      .map((x, i) => (i === lineIdx ? { ...x, qty: x.qty - qty } : x))
+      .filter((x) => x.qty > 0);
+    const updated = {
+      ...o,
+      lineItems,
+      items: lineItems.reduce((s, x) => s + x.qty, 0),
+      amount: newAmount,
+      tax: round2(Math.max(0, (o.tax || 0) - (refund - goods))),
+      amountPaid: newPaid,
+      payment: newAmount <= 0.004 ? "Refunded" : newAmount - newPaid <= 0.004 ? "Paid" : o.payment,
+      returns: [
+        ...(o.returns || []),
+        { date, productId: li.productId, name: li.name, qty, amount: refund, disposition },
+      ],
+    };
+    const product = products.find((p) => p.id === li.productId);
+    const cost = round2((product ? numVal(product.cost, 0) : 0) * qty);
+    const ref = o.invoice || o.id;
+    if (disposition === RETURN_STOCK && product) {
+      setProducts((prev) => prev.map((p) => (p.id === li.productId ? { ...p, stock: p.stock + qty } : p)));
+    }
+    setSalesOrders((prev) => prev.map((x) => (x.id === o.id ? updated : x)));
+    if (o.customerId) {
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === o.customerId
+            ? {
+              ...c,
+              spent: Math.max(0, round2(c.spent - refund)),
+              outstanding: Math.max(0, round2(c.outstanding - balDrop)),
+            }
+            : c,
+        ),
+      );
+    }
+    // Ledger: reverse the sale as a "Sales Returns" line (cash only for money
+    // actually handed back), take the cost back out of cost of goods sold, and
+    // for written-off goods book that cost as an expense instead.
+    const additions = [];
+    const push = (t) => additions.push({ id: nextTxnId([...ledger, ...additions]), date, attachment: null, ...t });
+    if (refund - cashRefund > 0.004) {
+      push({
+        desc: `Sales return — ${ref} (${li.name} × ${qty})`,
+        type: "Expense",
+        category: "Sales Returns",
+        amount: round2(refund - cashRefund),
+        account: null,
+        kind: "opex",
+        cash: false,
+      });
+    }
+    if (cashRefund > 0.004) {
+      push({
+        desc: `Sales return refund — ${ref} (${li.name} × ${qty})`,
+        type: "Expense",
+        category: "Sales Returns",
+        amount: cashRefund,
+        account: MAIN_CASH_ID,
+        kind: "opex",
+        cash: true,
+      });
+    }
+    if (cost > 0) {
+      push({
+        desc: `Cost of goods sold reversed — ${ref} return`,
+        type: "Expense",
+        category: "Cost of Goods Sold",
+        amount: -cost,
+        account: null,
+        kind: "cogs",
+        cash: false,
+      });
+      if (disposition === RETURN_EXPENSE) {
+        push({
+          desc: `Returned goods written off — ${ref} (${li.name} × ${qty})`,
+          type: "Expense",
+          category: "Returned Goods Written Off",
+          amount: cost,
+          account: null,
+          kind: "opex",
+          cash: false,
+        });
+      }
+    }
+    if (additions.length) setLedger((prev) => [...additions, ...prev]);
+    setSelected(updated);
+    setReturnOrder(null);
+    setToast(
+      `${qty} × ${li.name} returned from ${o.id} — ${money(refund)} reduced` +
+        (disposition === RETURN_STOCK ? ", added back to stock." : ", added to expenses.") +
+        (cashRefund > 0 ? ` Refund of ${money(cashRefund)} paid out.` : ""),
+    );
   }
   function deleteOrder(o) {
     if (
@@ -633,6 +826,17 @@ export function SalesOrders({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          setReturnOrder(o);
+                        }}
+                        disabled={!(o.lineItems && o.lineItems.length > 0)}
+                        title="Return items from this order"
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-30 ${dark ? "border-amber-700 text-amber-400 hover:bg-slate-800" : "border-amber-300 text-amber-700 hover:bg-amber-50"}`}
+                      >
+                        Return
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           deleteOrder(o);
                         }}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
@@ -664,6 +868,17 @@ export function SalesOrders({
           inputBg={inputBg}
           products={products}
           customers={customers}
+        />
+      )}
+      {returnOrder && (
+        <ReturnModal
+          order={returnOrder}
+          onClose={() => setReturnOrder(null)}
+          onSave={(r) => returnItems(returnOrder, r)}
+          dark={dark}
+          cardBg={cardBg}
+          subText={subText}
+          inputBg={inputBg}
         />
       )}
       {selected && (
@@ -797,6 +1012,29 @@ export function SalesOrders({
             >
               <Printer size={14} />
               {" Print Invoice"}
+            </button>
+            {selected.returns && selected.returns.length > 0 && (
+              <div className={`pt-2 border-t border-dashed ${dark ? "border-slate-800" : "border-slate-200"}`}>
+                <p className={`text-[11px] font-medium mb-1 ${subText}`}>Returns</p>
+                {selected.returns.map((r, i) => (
+                  <div key={i} className={`flex justify-between text-[11px] ${subText}`}>
+                    <span>
+                      {fmtDate(r.date)} — {r.name} × {r.qty} ({r.disposition === RETURN_STOCK ? "to stock" : "to expenses"})
+                    </span>
+                    <span className="font-medium">−{money(r.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => {
+                setReturnOrder(selected);
+                setSelected(null);
+              }}
+              disabled={!(selected.lineItems && selected.lineItems.length > 0)}
+              className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md transition-colors mt-2 disabled:opacity-40"
+            >
+              {" Return Items"}
             </button>
             <button
               onClick={() => deleteOrder(selected)}
