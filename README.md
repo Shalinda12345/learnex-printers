@@ -91,6 +91,56 @@ be right from any account that cannot restore a backup: negative prices, costs, 
 for more than it is worth, dates before 2000 or more than a month ahead (`lib/server/learnex/sanity.ts`). Replacing
 or emptying a whole module in one request needs the *Restore & import* or *Clear & factory reset* permission.
 
+## Running it online (Vercel + alwaysdata) and operations
+
+**What a deploy does and does not do.** Merging to the branch Vercel builds only replaces the *code*. It never
+touches the database: no migration runs, no data is read or written during the build. Schema changes
+(`db/migrations/*.sql`) are applied by hand with `npm run db:setup` and are written to be repeatable and
+additive (`CREATE TABLE IF NOT EXISTS`). The current release needs **no** schema change.
+
+**Settings in Vercel (Project → Settings → Environment Variables).** `DATABASE_URL` (the app's own alwaysdata
+login, never the admin login), `AUTH_REQUIRE_HTTPS=1` (Vercel serves HTTPS, so passwords are refused over plain
+HTTP), `TRUST_PROXY_HOPS=1`, and `AUTH_SETUP_CODE` only while no owner account exists. Optional:
+`DATABASE_SSL=1` (encrypt the Vercel→alwaysdata connection and check the certificate; turn it on once you have
+confirmed alwaysdata offers TLS for your database, or sign-in will fail) and `DATABASE_POOL_SIZE=3` (every running
+serverless instance opens its own connections; a small hosted database can run out of them). Do not set
+`MYSQL_ADMIN_URL` there.
+
+**Know the limits of serverless.** The sign-in throttle is kept in each instance's memory, so on Vercel it is a
+speed bump, not a wall; the real protections are the per-account lockout (stored in the database) and the hashing
+queue. Vercel also limits a request body to about 4.5 MB, so restoring a big backup file, or saving many photos in
+one go, can be refused there even though the app itself allows more; restore large backups against the database
+from a computer instead.
+
+**Backups.** The in-app *Download backup* is a convenience, not a backup plan. `scripts/db-backup.mjs` copies
+every table to a file (read-only; nothing in the database changes) and can prove that a restore worked:
+
+```
+npm run db:backup                                     # writes db-backups/<database>-<time>.json
+npm run db:restore -- db-backups/FILE.json --to mysql://USER:PASS@HOST/EMPTY_DB   # into an EMPTY database
+npm run db:verify  -- db-backups/FILE.json            # compares the backup with DATABASE_URL (row counts + checksum)
+```
+
+`restore` refuses any database that already holds rows, so it can never overwrite data; create the empty
+database's tables first (`DATABASE_URL=<that url> npm run db:setup`). Practise once: back up, restore into a scratch
+database, check the output says *every table matches*, then drop the scratch database. Backup files contain all
+business data and the staff's password hashes: they are in `.gitignore`, keep copies somewhere private and
+off the server. Also check what alwaysdata's own backup service covers, and keep both.
+
+**Monitoring.** `GET /api/health` returns `200 {"ok":true}` when the app can reach its database and `503` when
+not, and nothing else. Point an uptime monitor (UptimeRobot, Better Stack, ...) at it. Errors are written to the
+Vercel function logs (Project → Logs); passwords and tokens are never logged.
+
+**If something goes wrong.**
+- *Site down, `/api/health` 503:* the database is unreachable or refusing the login. Check the alwaysdata
+  panel (service up? password changed? connection limit reached?) and `DATABASE_URL` in Vercel.
+- *Bad deploy:* Vercel → Deployments → pick the last good one → *Promote to Production*. The database is not
+  touched by deploys, so a rollback is instant and safe.
+- *Data damaged or deleted:* stop staff working, restore the newest good backup into a scratch database, `verify`
+  it, and copy back only what is needed. Every change is in the activity log (old and new values).
+- *A secret leaked (database password, setup code):* change it in alwaysdata, update `DATABASE_URL` in Vercel,
+  redeploy; if staff passwords may be exposed, reset them in Settings → Users (this signs them out everywhere).
+
 ## Project layout
 
 ```
@@ -106,7 +156,7 @@ lib/
   learnex/              Browser-side logic: accounting engine, persistence, backup, helpers
   server/               Server-only code: database pool, sessions, user admin, data repository
 db/migrations/          SQL schema, applied in filename order by db:setup
-scripts/                db:setup and the database test runner
+scripts/                db:setup, db-backup (backup / restore / verify) and the database test runner
 tests/                  Database/API/UI suites (tests/*.test.mjs) and unit tests (tests/unit)
 ```
 
@@ -129,3 +179,11 @@ Each module (products, sales orders, ledger, ...) lives in React state in the br
 diffed and sent to `/api/learnex/sync`, which saves them in one transaction and records them in the
 activity log. The server checks the signed-in user's permissions on every request; see
 `lib/learnex/persistence.js` and `lib/server/learnex/repository.ts`.
+
+**Two people at once.** Every saved record has a version (its `updated_at`, which exists on every table, so
+no schema change was needed). `/api/learnex/data` returns the version of each record; each save sends back the
+versions it started from (`base`) and the ids it believes are new (`creates`). If someone else changed or deleted
+a record meanwhile, or already used a new record's id, the whole save is refused with `409 conflict` and nothing is
+written: the page shows **Out of date** in the top bar and offers to reload. So two cashiers can no longer
+silently overwrite each other's sale or sell the same stock twice; the one who loses reloads and repeats the
+sale. Requests without versions (a browser tab opened before an update) are accepted as before.

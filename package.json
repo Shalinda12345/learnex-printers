@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:setup": "node --env-file=.env scripts/db-setup.mjs",
+    "db:backup": "node --env-file=.env scripts/db-backup.mjs backup",
+    "db:restore": "node --env-file=.env scripts/db-backup.mjs restore",
+    "db:verify": "node --env-file=.env scripts/db-backup.mjs verify",
     "test:db": "next build && node --env-file=.env scripts/test-db.mjs",
     "test:unit": "node --import ./tests/unit/register.mjs --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"tests/unit/*.test.mjs\""
   },
