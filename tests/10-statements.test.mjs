@@ -484,7 +484,7 @@ describe("the statements", () => {
       [8160, 670, 4800, 13630],
     );
     const header = (await page.locator("main table thead th").allInnerTexts()).map((c) => c.trim());
-    assert.deepEqual(header, ["", "Capital", "Retained earnings", "Opening balance equity", "Total equity"]);
+    assert.deepEqual(header, ["Actions", "Capital", "Retained earnings", "Opening balance equity", "Total equity"]);
     // opening: capital 1,000, no profit yet, opening-balance line 7,160. Then profit 670, capital 5,000, drawings 200
     assert.deepEqual(await equityTable(page), [
       ["Balance at the start (beginning)", "Rs. 1,000", "Rs. 0", "Rs. 7,160", "Rs. 8,160"],

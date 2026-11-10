@@ -1,4 +1,4 @@
-import { readJson, respond } from "@/lib/server/learnex/http";
+import { BODY_LIMITS, readJson, respond } from "@/lib/server/learnex/http";
 import { requirePermission, requireSameOrigin, requireUser } from "@/lib/server/auth/dal";
 import { createUser, listRoles, listUsers } from "@/lib/server/auth/admin";
 
@@ -16,6 +16,6 @@ export async function POST(request: Request) {
     requireSameOrigin(request);
     const user = await requireUser();
     requirePermission(user, "users.manage");
-    return createUser(user, await readJson(request));
+    return createUser(user, await readJson(request, BODY_LIMITS.admin));
   });
 }

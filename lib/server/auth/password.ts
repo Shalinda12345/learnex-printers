@@ -1,5 +1,7 @@
 import "server-only";
 import { randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual, type ScryptOptions } from "node:crypto";
+import { commonPasswordProblem } from "@/lib/auth/common-passwords";
+import { HttpError } from "@/lib/server/errors";
 
 // scrypt with OWASP's recommended cost (N=2^16, r=8, p=2 ≈ 64 MiB per hash).
 // The parameters are stored with each hash, so they can be raised later:
@@ -11,11 +13,38 @@ const MAX_MEMORY = 256 * 1024 * 1024;
 export const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
 
+// Every hash costs ~0.3 s of CPU and 64 MiB. Instead of a request quota shared by all
+// visitors (which one anonymous script could use up to block every real sign-in), at
+// most MAX_PARALLEL hashes run at once and the rest wait their turn. Only when a very
+// long queue has built up are further requests turned away.
+const MAX_PARALLEL = 4;
+const MAX_WAITING = 64;
+let running = 0;
+const waiting: (() => void)[] = [];
+
+async function inTurn<T>(fn: () => Promise<T>): Promise<T> {
+  if (running >= MAX_PARALLEL) {
+    if (waiting.length >= MAX_WAITING)
+      throw new HttpError(503, "The server is busy. Try again in a few seconds.", "busy", { "Retry-After": "5" });
+    await new Promise<void>((resolve) => waiting.push(resolve)); // the finishing hash hands its place over
+  } else running++;
+  try {
+    return await fn();
+  } finally {
+    const next = waiting.shift();
+    if (next) next();
+    else running--;
+  }
+}
+
 function scrypt(password: string, salt: Buffer, options: ScryptOptions): Promise<Buffer> {
-  return new Promise((resolve, reject) =>
-    scryptCb(password.normalize("NFKC"), salt, KEY_LENGTH, { ...options, maxmem: MAX_MEMORY }, (err, key) =>
-      err ? reject(err) : resolve(key),
-    ),
+  return inTurn(
+    () =>
+      new Promise<Buffer>((resolve, reject) =>
+        scryptCb(password.normalize("NFKC"), salt, KEY_LENGTH, { ...options, maxmem: MAX_MEMORY }, (err, key) =>
+          err ? reject(err) : resolve(key),
+        ),
+      ),
   );
 }
 
@@ -52,7 +81,7 @@ export function passwordProblem(password: unknown, username?: string): string | 
   if (username && password.trim().toLowerCase() === username.trim().toLowerCase()) {
     return "The password can't be the same as the username.";
   }
-  return null;
+  return commonPasswordProblem(password);
 }
 
 // Easy to read aloud or copy by hand: no 0/O, 1/l/I.

@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { AlertTriangle, CheckCircle2, Download, Printer, ShieldCheck } from "@/components/learnex/icons";
 import { LedgerBook } from "@/components/learnex/modules/LedgerBook";
-import { StatCard } from "@/components/learnex/ui";
+import { StatCard, TabBar } from "@/components/learnex/ui";
 import {
   NON_PNL_LABEL,
   computeCashFlow,
@@ -58,19 +58,19 @@ export function DateRangeBar({ from, to, setFrom, setTo, dark, subText, presets 
               setFrom(p.from);
               setTo(p.to);
             }}
-            className={`text-xs font-medium px-3 py-1.5 rounded-xl border transition-colors ${dark ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+            className="btn btn-secondary btn-sm"
           >
             {p.label}
           </button>
         ))}
-      <input
+      <input aria-label="From date"
         type="date"
         value={from}
         onChange={(e) => setFrom(e.target.value)}
         className={`text-xs px-3 py-1.5 rounded-xl border ${dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200"}`}
       />
       <span className={`text-xs ${subText}`}>to</span>
-      <input
+      <input aria-label="To date"
         type="date"
         value={to}
         onChange={(e) => setTo(e.target.value)}
@@ -431,10 +431,10 @@ export function ProfitLossStatement({
                     key={t.id}
                     className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow}`}
                   >
-                    <td className={`py-2 px-2 ${subText}`}>{fmtDate(t.date)}</td>
+                    <td className={`py-2 px-2 ${subText} whitespace-nowrap`}>{fmtDate(t.date)}</td>
                     <td className="py-2 px-2">{t.desc}</td>
                     <td className={`py-2 px-2 ${subText}`}>{NON_PNL_LABEL[txnKind(t)] || t.category}</td>
-                    <td className="py-2 px-2 text-right font-medium">{money(t.amount)}</td>
+                    <td className="py-2 px-2 text-right font-medium whitespace-nowrap">{money(t.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1104,7 +1104,7 @@ export function EquityStatement({
               <table className="w-full text-sm">
                 <thead>
                   <tr className={`text-left ${subText} text-xs border-t ${border}`}>
-                    <th className="font-medium py-2 px-2" />
+                    <th className="font-medium py-2 px-2"><span className="sr-only">Actions</span></th>
                     {EQUITY_COLUMNS.map((c) => (
                       <th key={c} className="font-medium py-2 px-2 text-right">
                         {c}
@@ -1173,24 +1173,14 @@ export function Accounting(props) {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold">Accounting</h1>
+        <h2 className="text-xl font-bold">Accounting</h2>
         <p className={`text-sm ${subText}`}>
           Income and expenses flow into the Profit or Loss statement; asset, loan and equity movements flow into
           the Statement of Financial Position; the Statements of Cash Flows and Changes in Equity show how cash
           and the owner&apos;s stake moved.
         </p>
       </div>
-      <div className="flex gap-2 flex-wrap">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? "bg-blue-600 text-white" : `border ${dark ? "border-slate-700 text-slate-300" : "border-slate-200 text-slate-600"}`}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={tabs} value={tab} onChange={setTab} dark={dark} />
       {tab === "ledger" && <LedgerBook {...props} />}
       {tab === "pnl" && <ProfitLossStatement {...props} />}
       {tab === "position" && <FinancialPosition {...props} />}

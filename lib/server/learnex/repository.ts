@@ -15,6 +15,7 @@ import {
 import { BadRequestError, ForbiddenError } from "@/lib/server/errors";
 import { audit, type Actor } from "@/lib/server/audit";
 import { STORE_LABELS, type StoreAccess, type StoreKey } from "@/lib/auth/permissions";
+import { sanityProblem } from "@/lib/server/learnex/sanity";
 
 type Rec = Record<string, unknown>;
 export type AccessMap = Partial<Record<StoreKey, StoreAccess>>;
@@ -27,6 +28,10 @@ interface ChangeSummary {
   deleted?: number;
   replaced?: boolean;
   ids?: unknown[];
+  /** old and new value of each changed field (first records only) */
+  edits?: Record<string, unknown>[];
+  /** what deleted records held (first records only) */
+  removed?: Record<string, unknown>[];
 }
 
 export interface StoreChange {
@@ -55,6 +60,15 @@ const DECIMAL_FRAC_DIGITS = 30;
 // goes in one statement of its own.
 const BATCH_BYTES = 256 * 1024;
 const BATCH_IDS = 1000;
+
+// A single request that deletes at least this many records AND every record the
+// module has is a "Clear module" — it needs the same permission as replacing a
+// module (see WHOLE_MODULE_PERMISSIONS). Smaller modules can be emptied record
+// by record, as the screens allow. This stops the one-shot wipe (and a client
+// bug or script sending one); it cannot stop someone who is allowed to delete
+// records in a module from deleting them a few at a time over several requests.
+// Those requests are all recorded in the activity log.
+const MASS_DELETE_MIN = 10;
 
 const q = (identifier: string) => `\`${identifier}\``;
 const isPlainObject = (v: unknown): v is Rec => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -317,7 +331,65 @@ async function updatePositions(conn: PoolConnection, def: ListStore, order: (str
   }
 }
 
-async function syncList(conn: PoolConnection, def: ListStore, change: StoreChange) {
+async function countRows(conn: PoolConnection, table: string) {
+  const [rows] = await conn.query<RowDataPacket[]>(`SELECT count(*) AS n FROM ${q(table)}`);
+  return Number(rows[0].n);
+}
+
+// The activity log says what a save changed, not only which records: the old and new
+// value of every field that changed, and what a deleted record held. Because the browser
+// works out the figures, this is the trail that shows a price, stock level or amount that
+// was altered. Only the first records of a save are described, long values are cut short.
+const AUDIT_RECORDS = 25;
+const AUDIT_VALUE = 80;
+const brief = (v: unknown) => {
+  if (v === null || v === undefined || typeof v === "number" || typeof v === "boolean") return v ?? null;
+  const s = typeof v === "string" ? v : JSON.stringify(v);
+  return s.length > AUDIT_VALUE ? s.slice(0, AUDIT_VALUE) + "…" : s;
+};
+
+async function describeChanges(conn: PoolConnection, def: ListStore, upserts: Rec[], deleteIds: unknown[]) {
+  const wanted = [...upserts.slice(0, AUDIT_RECORDS).map((r) => r.id), ...deleteIds.slice(0, AUDIT_RECORDS)];
+  if (!wanted.length) return {};
+  const [rows] = await conn.query<RowDataPacket[]>(`SELECT * FROM ${q(def.table)} WHERE \`id\` IN (?)`, [wanted]);
+  const old = new Map(rows.map((r) => [String(r.id), r]));
+  const columns = def.fields.filter(isColumn);
+  const valueOf = (row: RowDataPacket, f: Column) => (row[f.col] == null ? null : fromDb(f.type, row[f.col]));
+  const edits: Rec[] = [];
+  for (const rec of upserts.slice(0, AUDIT_RECORDS)) {
+    const row = old.get(String(rec.id));
+    if (!row) continue;
+    const changed: Rec = {};
+    for (const f of columns) {
+      const from = valueOf(row, f);
+      const to = rec[f.prop] ?? null;
+      if (JSON.stringify(from) !== JSON.stringify(to) && !(typeof from === "number" && Number(to) === from))
+        changed[f.prop] = { from: brief(from), to: brief(to) };
+    }
+    if (Object.keys(changed).length) edits.push({ id: rec.id, changed });
+  }
+  const removed: Rec[] = [];
+  for (const id of deleteIds.slice(0, AUDIT_RECORDS)) {
+    const row = old.get(String(id));
+    if (!row) continue;
+    const was: Rec = {};
+    for (const f of columns) {
+      const v = valueOf(row, f);
+      if (v !== null) was[f.prop] = brief(v);
+    }
+    removed.push({ id, was });
+  }
+  return { ...(edits.length ? { edits } : {}), ...(removed.length ? { removed } : {}) };
+}
+
+/**
+ * `wholeModules`: may this user replace or empty the module in one go? Without
+ * it, `replace` is only the very first save of a module nobody has saved yet,
+ * one request may not delete every record of a module that has many, and what
+ * is saved must pass the sanity checks (lib/server/learnex/sanity.ts). The same
+ * permission means "trusted to write any data, as a backup restore does".
+ */
+async function syncList(conn: PoolConnection, def: ListStore, change: StoreChange, wholeModules: boolean) {
   const upserts = change.upserts ?? [];
   const deletes = change.deletes ?? [];
   if (!Array.isArray(upserts) || !upserts.every(isPlainObject))
@@ -334,14 +406,54 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
   checkUnique(def, order);
   const position = new Map<unknown, number>(order.map((id, i) => [id, i + 1]));
 
-  if (change.replace) await conn.query(`DELETE FROM ${q(def.table)}`);
   const deleteIds = deletes.map((id) => checkId(def, id));
+  const label = STORE_LABELS[def.key as StoreKey] ?? def.key;
+
+  // A role that cannot restore a backup may not save impossible figures (negative prices, dates in 2099, ...).
+  if (!wholeModules) {
+    for (const rec of upserts) {
+      const problem = sanityProblem(def.key, rec);
+      if (problem)
+        throw new BadRequestError(`${label} ${JSON.stringify(rec.id)}: ${problem}. Nothing was saved.`);
+    }
+  }
+
+  if (change.replace) {
+    if (wholeModules) await conn.query(`DELETE FROM ${q(def.table)}`);
+    else {
+      // Without the restore/reset permission `replace` must never overwrite or clear what is
+      // stored: it is only the very first save of a module (nothing saved, nothing in the table).
+      const [state] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM store_state WHERE store = ?`, [
+        def.key,
+      ]);
+      const [stored] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM ${q(def.table)} LIMIT 1`);
+      if (state.length || stored.length) {
+        throw new ForbiddenError(
+          `You don't have permission to replace everything in ${label}. Nothing was saved.`,
+          "replace_forbidden",
+        );
+      }
+    }
+  }
+
+  // What the records held before this save (the activity log keeps it).
+  const detail = change.replace ? {} : await describeChanges(conn, def, upserts, deleteIds);
+
+  // Deleting every record in one request is "Clear module" — the same power as `replace`.
+  const guardWipe = !wholeModules && deleteIds.length >= MASS_DELETE_MIN;
+  const before = guardWipe ? await countRows(conn, def.table) : 0;
   let deleted = 0;
   for (const batch of chunks(deleteIds, BATCH_IDS)) {
     const [res] = await conn.query<ResultSetHeader>(`DELETE FROM ${q(def.table)} WHERE \`id\` IN (?)`, [
       batch,
     ]);
     deleted += res.affectedRows;
+  }
+  if (guardWipe && before >= MASS_DELETE_MIN && deleted >= before) {
+    throw new ForbiddenError(
+      `You don't have permission to delete every record in ${label} at once (that needs "Clear & factory reset"). Nothing was saved.`,
+      "wipe_forbidden",
+    );
   }
   let existing = 0;
   for (const batch of chunks(upsertIds, BATCH_IDS)) {
@@ -360,6 +472,7 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
     updated: existing,
     deleted,
     ids: [...upsertIds, ...deleteIds].slice(0, 50),
+    ...detail,
   };
   if (change.replace) summary.replaced = true;
   return summary;
@@ -422,11 +535,15 @@ async function syncReplace(conn: PoolConnection, def: ReplaceStore, value: unkno
 /* public API                                                           */
 /* ------------------------------------------------------------------ */
 
-async function applyChange(conn: PoolConnection, change: StoreChange): Promise<ChangeSummary> {
+async function applyChange(
+  conn: PoolConnection,
+  change: StoreChange,
+  wholeModules: boolean,
+): Promise<ChangeSummary> {
   if (!isPlainObject(change)) throw new BadRequestError("each change must be an object");
   const def = STORE_BY_KEY.get(change.store);
   if (!def) throw new BadRequestError(`unknown module ${JSON.stringify(change.store)}`);
-  if (def.kind === "list") return syncList(conn, def, change);
+  if (def.kind === "list") return syncList(conn, def, change, wholeModules);
   if (def.kind === "single") return syncSingle(conn, def, change.value);
   return syncReplace(conn, def, change.value);
 }
@@ -471,19 +588,22 @@ function checkWritable(access: AccessMap, store: unknown) {
 /**
  * Saves a batch of module changes atomically (all or nothing). Every module
  * touched must be writable for the user; the activity log entry is written in
- * the same transaction.
+ * the same transaction. `wholeModules` says whether the user may replace or
+ * empty a module in one request (restore / reset permission); it is off unless
+ * the caller turns it on.
  */
 export async function saveChanges(
   changes: unknown,
   actor: Actor | null = null,
   access: AccessMap = ALL_ACCESS,
+  { wholeModules = false }: { wholeModules?: boolean } = {},
 ) {
   if (!Array.isArray(changes) || !changes.length)
     throw new BadRequestError("changes must be a non-empty list");
   for (const change of changes) checkWritable(access, isPlainObject(change) ? change.store : undefined);
   await withTransaction(async (conn) => {
     const summaries: ChangeSummary[] = [];
-    for (const change of changes) summaries.push(await applyChange(conn, change as StoreChange));
+    for (const change of changes) summaries.push(await applyChange(conn, change as StoreChange, wholeModules));
     await audit(actor, "data.save", summaries.map((s) => s.store).join(", "), { changes: summaries }, conn);
   });
 }
@@ -503,12 +623,13 @@ export async function importAll(stores: unknown, actor: Actor | null = null) {
       if (def.kind === "list") {
         if (!Array.isArray(value)) throw new BadRequestError(`${def.key}: expected a list`);
         imported.push(
-          await syncList(conn, def, {
-            store: def.key,
-            replace: true,
-            upserts: value,
-            order: value.map((r) => (r as Rec)?.id),
-          }),
+          // Importing is already limited to the restore permission (see the import route).
+          await syncList(
+            conn,
+            def,
+            { store: def.key, replace: true, upserts: value, order: value.map((r) => (r as Rec)?.id) },
+            true,
+          ),
         );
       } else if (def.kind === "single") imported.push(await syncSingle(conn, def, value));
       else imported.push(await syncReplace(conn, def, value));

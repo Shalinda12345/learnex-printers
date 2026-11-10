@@ -21,6 +21,7 @@ import {
   nextNumId,
   nextSeqId,
   rangePresets,
+  csvCell,
 } from "@/lib/learnex/utils";
 
 const localDay = (d) =>
@@ -170,4 +171,30 @@ describe("stock and ids", () => {
     );
     assert.equal(nextSeqId([], "id", "PO-", 4000), "PO-4001");
   });
+});
+
+describe("exports", () => {
+  test("UTIL-18 CSV cells that start like a formula are made plain text; numbers stay numbers", () => {
+    // text a spreadsheet would run as a formula gets a leading apostrophe
+    const formulas = ["=1+1", '=HYPERLINK("http://evil.example","x")', "+SUM(1,1)", "-2+3", "@SUM(1,1)", "\t=1+1", "\r=1"];
+    for (const text of formulas)
+      assert.equal(csvCell(text), '"\'' + text.replace(/"/g, '""') + '"', JSON.stringify(text));
+    // ordinary text, quotes, blanks and dashes are untouched
+    assert.equal(csvCell("Alpha Printer"), '"Alpha Printer"');
+    assert.equal(csvCell('say "hi"'), '"say ""hi"""');
+    assert.equal(csvCell(null), '""');
+    assert.equal(csvCell(undefined), '""');
+    assert.equal(csvCell("—"), '"—"');
+    // numbers, and text that is just a number, are not touched (a loss stays a real number in Excel)
+    assert.equal(csvCell(-1234.5), '"-1234.5"');
+    assert.equal(csvCell(0), '"0"');
+    assert.equal(csvCell("-5"), '"-5"');
+    assert.equal(csvCell("+1.50"), '"+1.50"');
+    assert.equal(csvCell(1.005), '"1.01"'); // amounts are still rounded to the cent
+  });
+});
+
+test("UTIL-ESC escapeHtml also neutralises quotes, so it is safe inside attribute values", async () => {
+  const { escapeHtml } = await import("@/lib/learnex/utils");
+  assert.equal(escapeHtml(`"><img src=x onerror='a()'>&`), "&quot;&gt;&lt;img src=x onerror=&#39;a()&#39;&gt;&amp;");
 });

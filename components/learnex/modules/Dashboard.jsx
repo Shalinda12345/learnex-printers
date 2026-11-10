@@ -17,7 +17,7 @@ import {
   Users,
   Wallet,
 } from "@/components/learnex/icons";
-import { Badge, MiniCalendar, PeriodSelector, useCountUp } from "@/components/learnex/ui";
+import { Badge, EmptyState, MiniCalendar, PeriodSelector, useCountUp } from "@/components/learnex/ui";
 import { CATEGORY_COLORS, REVENUE_TREND } from "@/lib/learnex/seed";
 import { CURRENCY_SYMBOL, PERIODS, fmtDate, isInPeriod, money, round2, todayISO } from "@/lib/learnex/utils";
 import { DonutChart, HBarList, TrendChart } from "@/components/learnex/charts";
@@ -54,25 +54,23 @@ export function KpiCard({
     slate: "bg-slate-100 text-slate-600",
   }[tone];
   return (
-    <div className={`rounded-2xl border p-5 ${cardBg} shadow-sm hover:shadow-md transition-shadow`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className={`text-xs font-medium ${subText}`}>{label}</p>
-          <p className="text-2xl font-bold mt-1.5 tracking-tight">
-            {prefix}
-            {animated.toLocaleString(
-              "en-US",
-              typeof value === "number" && !Number.isInteger(value)
-                ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-                : {},
-            )}
-            {suffix}
-          </p>
-        </div>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${toneBg}`}>
+    <div className={`rounded-2xl border p-4 sm:p-5 ${cardBg} shadow-sm hover:shadow-md transition-shadow`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className={`text-xs font-medium leading-snug ${subText}`}>{label}</p>
+        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${toneBg}`}>
           <Icon size={18} />
         </div>
       </div>
+      <p className="text-xl sm:text-2xl font-bold mt-1.5 tracking-tight tabular-nums whitespace-nowrap">
+        {prefix}
+        {animated.toLocaleString(
+          "en-US",
+          typeof value === "number" && !Number.isInteger(value)
+            ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+            : {},
+        )}
+        {suffix}
+      </p>
       {trend && (
         <div className="flex items-center gap-1 mt-3">
           {trendUp ? (
@@ -102,7 +100,11 @@ export function Dashboard({
   deliveryRuns,
   cashAccounts,
   purchaseOrders,
+  currentUser,
 }) {
+  const hour = new Date().getHours();
+  const firstName = ((currentUser && currentUser.name) || "").trim().split(/\s+/)[0];
+  const greeting = `${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}${firstName ? `, ${firstName}` : ""}`;
   const [period, setPeriod] = useState("monthly");
   const anchor = todayISO();
   const periodTag = (PERIODS.find((p) => p.key === period) || {}).tag || "";
@@ -222,14 +224,18 @@ export function Dashboard({
   const totalDailyExpenses = (deliveryRuns || []).reduce((s, r) => s + (r.dailyExpense || 0), 0);
   return (
     <div className="space-y-6">
-      <div
-        className={`rounded-2xl p-6 bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg shadow-blue-900/20`}
-      >
-        <p className="text-blue-100 text-sm">Welcome back</p>
-        <h1 className="text-2xl font-bold mt-1">{"LEARNEX Printers & Distributors — Overview"}</h1>
-        <p className="text-blue-100 text-sm mt-1">
-          Here&apos;s how your business is performing, based on everything recorded so far.
-        </p>
+      <div className="relative overflow-hidden rounded-2xl p-6 sm:p-7 bg-linear-to-r from-blue-600 to-blue-800 text-white shadow-lg shadow-blue-900/20">
+        <div aria-hidden="true" className="absolute -right-12 -top-20 w-72 h-72 rounded-full bg-white/10" />
+        <div aria-hidden="true" className="absolute right-28 -bottom-28 w-60 h-60 rounded-full bg-white/5" />
+        <div className="relative">
+          <p className="text-blue-100 text-sm">{greeting}</p>
+          <h2 className="text-xl sm:text-2xl font-bold mt-1 tracking-tight">
+            {"LEARNEX Printers & Distributors — Overview"}
+          </h2>
+          <p className="text-blue-100 text-sm mt-1">
+            Here&apos;s how your business is performing, based on everything recorded so far.
+          </p>
+        </div>
       </div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -242,155 +248,174 @@ export function Dashboard({
         </div>
         <PeriodSelector period={period} setPeriod={setPeriod} dark={dark} />
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        <KpiCard
-          icon={DollarSign}
-          label={`Income (${periodTag})`}
-          value={income}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="blue"
-        />
-        <KpiCard
-          icon={TrendingUp}
-          label={`Net Profit (${periodTag})`}
-          value={profit}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="emerald"
-        />
-        <KpiCard
-          icon={Wallet}
-          label={`Expenses (${periodTag})`}
-          value={expenses}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="amber"
-        />
-        <KpiCard
-          icon={Boxes}
-          label={`Orders (${periodTag})`}
-          value={periodSalesOrders.length}
-          cardBg={cardBg}
-          subText={subText}
-          tone="blue"
-        />
-        <KpiCard
-          icon={Clock}
-          label={`Pending (${periodTag})`}
-          value={pendingOrders}
-          cardBg={cardBg}
-          subText={subText}
-          tone="amber"
-        />
-        <KpiCard
-          icon={CheckCircle2}
-          label={`Completed (${periodTag})`}
-          value={completedOrders}
-          cardBg={cardBg}
-          subText={subText}
-          tone="emerald"
-        />
-        <KpiCard
-          icon={Package}
-          label="Stock Value (Current)"
-          value={stockValue}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="slate"
-        />
-        <KpiCard
-          icon={Wallet}
-          label={"Cash & Bank (Current)"}
-          value={cashTotal}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="emerald"
-        />
-        <KpiCard
-          icon={ClipboardList}
-          label={`Purchases (${periodTag}, not an expense)`}
-          value={excludedPeriod.asset_purchase}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="slate"
-        />
-        <KpiCard
-          icon={Users}
-          label="Receivable (Current)"
-          value={receivableTotal}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="amber"
-        />
-        <KpiCard
-          icon={Truck}
-          label="Payable (Current)"
-          value={payableTotal}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="red"
-        />
-        <KpiCard
-          icon={AlertTriangle}
-          label="Low Stock Items (Current)"
-          value={lowStock}
-          cardBg={cardBg}
-          subText={subText}
-          tone="amber"
-        />
-        <KpiCard
-          icon={Layers}
-          label="Total Raw Materials Value"
-          value={rawMaterialsValue}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="blue"
-        />
-        <KpiCard
-          icon={Boxes}
-          label="Raw Material Stock"
-          value={rawMaterialStock}
-          cardBg={cardBg}
-          subText={subText}
-          tone="slate"
-        />
-        <KpiCard
-          icon={MinusCircle}
-          label="Materials Used Today"
-          value={materialsUsedToday}
-          cardBg={cardBg}
-          subText={subText}
-          tone="amber"
-        />
-        <KpiCard
-          icon={TrendingUp}
-          label="Delivery Net Profit Today"
-          value={deliveryNetProfitToday}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone={deliveryNetProfitToday >= 0 ? "emerald" : "red"}
-        />
-        <KpiCard
-          icon={Wallet}
-          label="Total Daily Expenses"
-          value={totalDailyExpenses}
-          prefix={`${CURRENCY_SYMBOL} `}
-          cardBg={cardBg}
-          subText={subText}
-          tone="amber"
-        />
-      </div>
+      <section aria-label="Performance" className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Performance · {periodTag}
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3 sm:gap-4">
+          <KpiCard
+            icon={DollarSign}
+            label={`Income (${periodTag})`}
+            value={income}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="blue"
+          />
+          <KpiCard
+            icon={TrendingUp}
+            label={`Net Profit (${periodTag})`}
+            value={profit}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="emerald"
+          />
+          <KpiCard
+            icon={Wallet}
+            label={`Expenses (${periodTag})`}
+            value={expenses}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="amber"
+          />
+          <KpiCard
+            icon={Boxes}
+            label={`Orders (${periodTag})`}
+            value={periodSalesOrders.length}
+            cardBg={cardBg}
+            subText={subText}
+            tone="blue"
+          />
+          <KpiCard
+            icon={Clock}
+            label={`Pending (${periodTag})`}
+            value={pendingOrders}
+            cardBg={cardBg}
+            subText={subText}
+            tone="amber"
+          />
+          <KpiCard
+            icon={CheckCircle2}
+            label={`Completed (${periodTag})`}
+            value={completedOrders}
+            cardBg={cardBg}
+            subText={subText}
+            tone="emerald"
+          />
+        </div>
+      </section>
+      <section aria-label="Money and stock" className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Money &amp; stock · right now
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3 sm:gap-4">
+          <KpiCard
+            icon={Wallet}
+            label={"Cash & Bank (Current)"}
+            value={cashTotal}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="emerald"
+          />
+          <KpiCard
+            icon={Users}
+            label="Receivable (Current)"
+            value={receivableTotal}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="amber"
+          />
+          <KpiCard
+            icon={Truck}
+            label="Payable (Current)"
+            value={payableTotal}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="red"
+          />
+          <KpiCard
+            icon={Package}
+            label="Stock Value (Current)"
+            value={stockValue}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="slate"
+          />
+          <KpiCard
+            icon={Layers}
+            label="Total Raw Materials Value"
+            value={rawMaterialsValue}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="blue"
+          />
+          <KpiCard
+            icon={AlertTriangle}
+            label="Low Stock Items (Current)"
+            value={lowStock}
+            cardBg={cardBg}
+            subText={subText}
+            tone="amber"
+          />
+        </div>
+      </section>
+      <section aria-label="Operations" className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Operations
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-3 sm:gap-4">
+          <KpiCard
+            icon={ClipboardList}
+            label={`Purchases (${periodTag}, not an expense)`}
+            value={excludedPeriod.asset_purchase}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="slate"
+          />
+          <KpiCard
+            icon={Boxes}
+            label="Raw Material Stock"
+            value={rawMaterialStock}
+            cardBg={cardBg}
+            subText={subText}
+            tone="slate"
+          />
+          <KpiCard
+            icon={MinusCircle}
+            label="Materials Used Today"
+            value={materialsUsedToday}
+            cardBg={cardBg}
+            subText={subText}
+            tone="amber"
+          />
+          <KpiCard
+            icon={TrendingUp}
+            label="Delivery Net Profit Today"
+            value={deliveryNetProfitToday}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone={deliveryNetProfitToday >= 0 ? "emerald" : "red"}
+          />
+          <KpiCard
+            icon={Wallet}
+            label="Total Daily Expenses"
+            value={totalDailyExpenses}
+            prefix={`${CURRENCY_SYMBOL} `}
+            cardBg={cardBg}
+            subText={subText}
+            tone="amber"
+          />
+        </div>
+      </section>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className={`xl:col-span-2 rounded-2xl border p-5 ${cardBg} shadow-sm`}>
           <div className="flex items-center justify-between mb-4">
@@ -405,7 +430,7 @@ export function Dashboard({
         <div className={`rounded-2xl border p-5 ${cardBg} shadow-sm`}>
           <h3 className="font-semibold mb-1">Stock Value by Category</h3>
           <p className={`text-xs ${subText} mb-2`}>Current inventory worth</p>
-          <DonutChart data={categorySplit} colors={CATEGORY_COLORS} dark={dark} />
+          <DonutChart data={categorySplit} colors={CATEGORY_COLORS} dark={dark} legend={false} />
           <div className="space-y-1.5 mt-2">
             {categorySplit.map((c) => (
               <div key={c.name} className="flex items-center justify-between text-xs">
@@ -448,21 +473,24 @@ export function Dashboard({
                 >
                   <td className="py-3 px-5 font-medium">{s.invoice || s.id}</td>
                   <td className="py-3 px-2">{s.customer}</td>
-                  <td className="py-3 px-2 font-medium">{money(s.amount)}</td>
+                  <td className="py-3 px-2 font-medium whitespace-nowrap">{money(s.amount)}</td>
                   <td className="py-3 px-2">
                     <Badge tone={s.payment === "Paid" ? "green" : s.payment === "Pending" ? "amber" : "red"}>
                       {s.payment}
                     </Badge>
                   </td>
-                  <td className="py-3 px-5 text-slate-500">{fmtDate(s.date)}</td>
+                  <td className="py-3 px-5 text-slate-500 whitespace-nowrap">{fmtDate(s.date)}</td>
                 </tr>
               ))}
               {recentSales.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={5}
-                    className={`text-center py-8 text-sm ${subText}`}
-                  >{`No sales recorded for ${periodTag.toLowerCase()}.`}</td>
+                  <td colSpan={5} className="py-2">
+                    <EmptyState
+                      compact
+                      subText={subText}
+                      title={`No sales recorded for ${periodTag.toLowerCase()}.`}
+                    />
+                  </td>
                 </tr>
               )}
             </tbody>

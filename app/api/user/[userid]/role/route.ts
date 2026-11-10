@@ -1,4 +1,4 @@
-import { readJson, respond } from "@/lib/server/learnex/http";
+import { BODY_LIMITS, readJson, respond } from "@/lib/server/learnex/http";
 import { requirePermission, requireSameOrigin, requireUser } from "@/lib/server/auth/dal";
 import { updateUser } from "@/lib/server/auth/admin";
 
@@ -8,7 +8,7 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/user/[userid
     requireSameOrigin(request);
     const user = await requireUser();
     requirePermission(user, "users.manage");
-    const { roleIds } = await readJson(request);
+    const { roleIds } = await readJson(request, BODY_LIMITS.admin);
     await updateUser(user, (await ctx.params).userid, { roleIds });
   });
 }

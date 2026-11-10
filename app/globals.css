@@ -1,316 +1,366 @@
-/* Base styles (from the original <head>). */
-* { box-sizing: border-box; }
-body { margin: 0; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-@keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* =====================================================================
+   LEARNEX ERP — global styles
 
-/* Auto-generated static CSS replacing the Tailwind CDN runtime.
-   Covers exactly the utility classes this app uses, so styling works
-   instantly and fully offline -- no JIT compile step, no network call. */
-.absolute { position: absolute; }
-.bg-\[\#1E293B\] { background-color: #1E293B; }
-.bg-black\/40 { background-color: rgba(0,0,0,0.4); }
-.bg-blue-50 { background-color: #eff6ff; }
-.bg-blue-600 { background-color: #2563eb; }
-.bg-emerald-600 { background-color: #059669; }
-.bg-gradient-to-br { background-image: linear-gradient(to bottom right, var(--tw-from,transparent), var(--tw-to,transparent)); }
-.bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-from,transparent), var(--tw-to,transparent)); }
-.bg-red-600 { background-color: #dc2626; }
-.bg-slate-100 { background-color: #f1f5f9; }
-.bg-slate-300 { background-color: #cbd5e1; }
-.bg-slate-800 { background-color: #1e293b; }
-.bg-slate-900 { background-color: #0f172a; }
-.bg-transparent { background-color: transparent; }
-.bg-white { background-color: #ffffff; }
-.border { border-width: 1px; border-style: solid; border-color: #e2e8f0; }
-.border-b { border-bottom-width: 1px; border-bottom-style: solid; border-color: #e2e8f0; }
-.border-blue-600 { border-color: #2563eb; }
-.border-dashed { border-style: dashed; }
-.border-emerald-600 { border-color: #059669; }
-.border-l { border-left-width: 1px; border-left-style: solid; border-color: #e2e8f0; }
-.border-r { border-right-width: 1px; border-right-style: solid; border-color: #e2e8f0; }
-.border-red-600 { border-color: #dc2626; }
-.border-slate-100 { border-color: #f1f5f9; }
-.border-slate-200 { border-color: #e2e8f0; }
-.border-slate-200\/20 { border-color: rgba(226,232,240,0.2); }
-.border-slate-700 { border-color: #334155; }
-.border-slate-700\/50 { border-color: rgba(51,65,85,0.5); }
-.border-slate-800 { border-color: #1e293b; }
-.border-t { border-top-width: 1px; border-top-style: solid; border-color: #e2e8f0; }
-.bottom-6 { bottom: 1.5rem; }
-.col-span-2 { grid-column: span 2 / span 2; }
-.col-span-full { grid-column: 1 / -1; }
-.cursor-pointer { cursor: pointer; }
-.duration-300 { transition-duration: .3s; }
-.fixed { position: fixed; }
-.flex { display: flex; }
-.flex-1 { flex: 1 1 0%; }
-.flex-col { flex-direction: column; }
-.flex-wrap { flex-wrap: wrap; }
-.font-bold { font-weight: 700; }
-.font-medium { font-weight: 500; }
-.font-sans { font-family: Inter, system-ui, sans-serif; }
-.font-semibold { font-weight: 600; }
-.from-blue-500 { --tw-from: #3b82f6; }
-.from-blue-600 { --tw-from: #2563eb; }
-.gap-1 { gap: 0.25rem; }
-.gap-1\.5 { gap: 0.375rem; }
-.gap-2 { gap: 0.5rem; }
-.gap-3 { gap: 0.75rem; }
-.gap-4 { gap: 1rem; }
-.gap-5 { gap: 1.25rem; }
-.grid { display: grid; }
-.grid-cols-1 { grid-template-columns: repeat(1,minmax(0,1fr)); }
-.grid-cols-2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
-.grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); }
-.grid-cols-4 { grid-template-columns: repeat(4,minmax(0,1fr)); }
-.grid-cols-5 { grid-template-columns: repeat(5,minmax(0,1fr)); }
-.grid-cols-6 { grid-template-columns: repeat(6,minmax(0,1fr)); }
-.h-10 { height: 2.5rem; }
-.h-16 { height: 4rem; }
-.h-2 { height: 0.5rem; }
-.h-2\.5 { height: 0.625rem; }
-.h-5 { height: 1.25rem; }
-.h-6 { height: 1.5rem; }
-.h-7 { height: 1.75rem; }
-.h-9 { height: 2.25rem; }
-.h-fit { height: fit-content; }
-.h-full { height: 100%; }
-.h-screen { height: 100vh; }
-.hidden { display: none; }
-.inline-flex { display: inline-flex; }
-.inset-0 { top:0; right:0; bottom:0; left:0; }
-.items-center { align-items: center; }
-.items-start { align-items: flex-start; }
-.justify-between { justify-content: space-between; }
-.justify-center { justify-content: center; }
-.justify-end { justify-content: flex-end; }
-.leading-relaxed { line-height: 1.625; }
-.leading-tight { line-height: 1.25; }
-.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.max-h-\[300px\] { max-height: 300px; }
-.max-h-\[90vh\] { max-height: 90vh; }
-.max-w-2xl { max-width: 42rem; }
-.max-w-\[180px\] { max-width: 180px; }
-.max-w-md { max-width: 28rem; }
-.max-w-sm { max-width: 24rem; }
-.max-w-xl { max-width: 36rem; }
-.mb-1 { margin-bottom: 0.25rem; }
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-3 { margin-bottom: 0.75rem; }
-.mb-4 { margin-bottom: 1rem; }
-.min-h-screen { min-height: 100vh; }
-.min-w-0 { min-width: 0; }
-.min-w-\[760px\] { min-width: 760px; }
-.min-w-\[780px\] { min-width: 780px; }
-.min-w-\[820px\] { min-width: 820px; }
-.min-w-\[860px\] { min-width: 860px; }
-.ml-1 { margin-left: 0.25rem; }
-.ml-2 { margin-left: 0.5rem; }
-.mt-0\.5 { margin-top: 0.125rem; }
-.mt-1 { margin-top: 0.25rem; }
-.mt-1\.5 { margin-top: 0.375rem; }
-.mt-2 { margin-top: 0.5rem; }
-.mt-3 { margin-top: 0.75rem; }
-.mt-4 { margin-top: 1rem; }
-.mx-auto { margin-left: auto; margin-right: auto; }
-.opacity-40 { opacity: 0.4; }
-.outline-none { outline: none; }
-.overflow-hidden { overflow: hidden; }
-.overflow-x-auto { overflow-x: auto; }
-.overflow-y-auto { overflow-y: auto; }
-.p-3 { padding: 0.75rem; }
-.p-4 { padding: 1rem; }
-.p-5 { padding: 1.25rem; }
-.p-6 { padding: 1.5rem; }
-.pb-1 { padding-bottom: 0.25rem; }
-.pb-3 { padding-bottom: 0.75rem; }
-.pl-3 { padding-left: 0.75rem; }
-.pr-1 { padding-right: 0.25rem; }
-.pr-2 { padding-right: 0.5rem; }
-.pt-2 { padding-top: 0.5rem; }
-.pt-3 { padding-top: 0.75rem; }
-.px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
-.px-2\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
-.px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
-.px-3\.5 { padding-left: 0.875rem; padding-right: 0.875rem; }
-.px-4 { padding-left: 1rem; padding-right: 1rem; }
-.px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
-.px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
-.py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
-.py-1\.5 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
-.py-10 { padding-top: 2.5rem; padding-bottom: 2.5rem; }
-.py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
-.py-2\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }
-.py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
-.py-4 { padding-top: 1rem; padding-bottom: 1rem; }
-.py-8 { padding-top: 2rem; padding-bottom: 2rem; }
-.relative { position: relative; }
-.right-6 { right: 1.5rem; }
-.rounded-2xl { border-radius: 1rem; }
-.rounded-full { border-radius: 9999px; }
-.rounded-lg { border-radius: 0.5rem; }
-.rounded-xl { border-radius: 0.75rem; }
-.shadow { box-shadow: 0 1px 3px 0 rgba(0,0,0,.1),0 1px 2px -1px rgba(0,0,0,.1); }
-.shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0,0,0,.25); }
-.shadow-blue-900\/20 { --tw-shadow-color: rgba(30,58,138,0.2); box-shadow: 0 10px 25px -5px rgba(30,58,138,0.2), 0 8px 10px -6px rgba(30,58,138,0.2); }
-.shadow-blue-900\/30 { --tw-shadow-color: rgba(30,58,138,0.3); box-shadow: 0 10px 25px -5px rgba(30,58,138,0.3), 0 8px 10px -6px rgba(30,58,138,0.3); }
-.shadow-blue-900\/40 { --tw-shadow-color: rgba(30,58,138,0.4); box-shadow: 0 10px 25px -5px rgba(30,58,138,0.4), 0 8px 10px -6px rgba(30,58,138,0.4); }
-.shadow-emerald-900\/20 { --tw-shadow-color: rgba(6,78,59,0.2); box-shadow: 0 10px 25px -5px rgba(6,78,59,0.2), 0 8px 10px -6px rgba(6,78,59,0.2); }
-.shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1); }
-.shadow-md { box-shadow: 0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1); }
-.shadow-red-900\/20 { --tw-shadow-color: rgba(127,29,29,0.2); box-shadow: 0 10px 25px -5px rgba(127,29,29,0.2), 0 8px 10px -6px rgba(127,29,29,0.2); }
-.shadow-sm { box-shadow: 0 1px 2px 0 rgba(0,0,0,.05); }
-.shrink-0 { flex-shrink: 0; }
-.space-y-1 > * + * { margin-top: 0.25rem; }
-.space-y-1\.5 > * + * { margin-top: 0.375rem; }
-.space-y-2 > * + * { margin-top: 0.5rem; }
-.space-y-3 > * + * { margin-top: 0.75rem; }
-.space-y-4 > * + * { margin-top: 1rem; }
-.space-y-5 > * + * { margin-top: 1.25rem; }
-.space-y-6 > * + * { margin-top: 1.5rem; }
-.sticky { position: sticky; }
-.text-2xl { font-size: 1.5rem; line-height: 2rem; }
-.text-\[11px\] { font-size: 11px; }
-.text-amber-300 { color: #fcd34d; }
-.text-amber-600 { color: #d97706; }
-.text-base { font-size: 1rem; line-height: 1.5rem; }
-.text-blue-100 { color: #dbeafe; }
-.text-blue-400 { color: #60a5fa; }
-.text-blue-600 { color: #2563eb; }
-.text-center { text-align: center; }
-.text-emerald-400 { color: #34d399; }
-.text-emerald-500 { color: #10b981; }
-.text-emerald-600 { color: #059669; }
-.text-left { text-align: left; }
-.text-lg { font-size: 1.125rem; line-height: 1.75rem; }
-.text-red-500 { color: #ef4444; }
-.text-red-600 { color: #dc2626; }
-.text-right { text-align: right; }
-.text-slate-300 { color: #cbd5e1; }
-.text-slate-400 { color: #94a3b8; }
-.text-slate-500 { color: #64748b; }
-.text-slate-600 { color: #475569; }
-.text-sm { font-size: 0.875rem; line-height: 1.25rem; }
-.text-white { color: #ffffff; }
-.text-xl { font-size: 1.25rem; line-height: 1.75rem; }
-.text-xs { font-size: 0.75rem; line-height: 1rem; }
-.to-blue-700 { --tw-to: #1d4ed8; }
-.to-blue-800 { --tw-to: #1e40af; }
-.top-0 { top: 0; }
-.top-0\.5 { top: 0.125rem; }
-.tracking-tight { letter-spacing: -0.025em; }
-.transition-all { transition: all .2s ease; }
-.transition-colors { transition: background-color .2s ease, color .2s ease, border-color .2s ease; }
-.transition-shadow { transition: box-shadow .2s ease; }
-.transition-transform { transition: transform .2s ease; }
-.translate-x-0\.5 { transform: translateX(0.125rem); }
-.translate-x-4 { transform: translateX(1rem); }
-.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.w-10 { width: 2.5rem; }
-.w-16 { width: 4rem; }
-.w-2 { width: 0.5rem; }
-.w-2\.5 { width: 0.625rem; }
-.w-20 { width: 5rem; }
-.w-24 { width: 6rem; }
-.w-5 { width: 1.25rem; }
-.w-6 { width: 1.5rem; }
-.w-64 { width: 16rem; }
-.w-7 { width: 1.75rem; }
-.w-9 { width: 2.25rem; }
-.w-\[76px\] { width: 76px; }
-.w-full { width: 100%; }
-.whitespace-nowrap { white-space: nowrap; }
-.z-50 { z-index: 50; }
-.disabled\:opacity-40:disabled { opacity: 0.4; }
-.disabled\:opacity-50:disabled { opacity: 0.5; }
-.hover\:-translate-y-0\.5:hover { transform: translateY(-0.125rem); }
-.hover\:bg-blue-700:hover { background-color: #1d4ed8; }
-.hover\:bg-emerald-700:hover { background-color: #047857; }
-.hover\:bg-red-50:hover { background-color: #fef2f2; }
-.hover\:bg-red-700:hover { background-color: #b91c1c; }
-.hover\:bg-slate-100:hover { background-color: #f1f5f9; }
-.hover\:bg-slate-50:hover { background-color: #f8fafc; }
-.hover\:bg-slate-800:hover { background-color: #1e293b; }
-.hover\:shadow-md:hover { box-shadow: 0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1); }
-.hover\:text-white:hover { color: #ffffff; }
-@media (min-width:1024px) { .lg\:col-span-2 { grid-column: span 2 / span 2; } }
-@media (min-width:1024px) { .lg\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } }
-@media (min-width:1024px) { .lg\:sticky { position: sticky; } }
-@media (min-width:1024px) { .lg\:top-0 { top: 0; } }
-@media (min-width:768px) { .md\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } }
-@media (min-width:768px) { .md\:grid-cols-4 { grid-template-columns: repeat(4,minmax(0,1fr)); } }
-@media (min-width:640px) { .sm\:grid-cols-2 { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (min-width:640px) { .sm\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } }
-@media (min-width:640px) { .sm\:items-center { align-items: center; } }
-@media (min-width:640px) { .sm\:w-72 { width: 18rem; } }
-@media (min-width:1280px) { .xl\:col-span-2 { grid-column: span 2 / span 2; } }
-@media (min-width:1280px) { .xl\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } }
-@media (min-width:1280px) { .xl\:grid-cols-4 { grid-template-columns: repeat(4,minmax(0,1fr)); } }
+   Tailwind v4 builds every utility class the components use (nothing is
+   hand-written any more), and this file adds the design layer on top:
+   tokens (type, radius, shadow, motion), element defaults (buttons, form
+   controls, tables, scrollbars, focus) and a few component classes (.btn,
+   .card, .input, ...) that the shared UI kit in components/learnex/ui.jsx uses.
 
-.disabled\:cursor-not-allowed:disabled { cursor: not-allowed; }
-.disabled\:opacity-40:disabled { opacity: .4; }
-.disabled\:opacity-50:disabled { opacity: .5; }
-.disabled\:hover\:translate-y-0:disabled:hover { transform: translateY(0); }
-.hover\:underline:hover { text-decoration: underline; }
-.hover\:text-white:hover { color: #fff; }
-.sm\:block { }
-@media (min-width:640px){ .sm\:block { display: block; } .sm\:flex-row { flex-direction: row; } .sm\:items-center { align-items: center; } .sm\:w-72 { width: 18rem; } .sm\:grid-cols-2 { grid-template-columns: repeat(2,minmax(0,1fr)); } .sm\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } }
-@media (min-width:768px){ .md\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } .md\:grid-cols-4 { grid-template-columns: repeat(4,minmax(0,1fr)); } }
-@media (min-width:1024px){ .lg\:col-span-2 { grid-column: span 2 / span 2; } .lg\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } .lg\:sticky { position: sticky; } .lg\:top-0 { top: 0; } }
-@media (min-width:1280px){ .xl\:col-span-2 { grid-column: span 2 / span 2; } .xl\:grid-cols-3 { grid-template-columns: repeat(3,minmax(0,1fr)); } .xl\:grid-cols-4 { grid-template-columns: repeat(4,minmax(0,1fr)); } }
-/* Calendar widget utilities */
-.grid-cols-7 { grid-template-columns: repeat(7,minmax(0,1fr)); }
-.gap-1\.5 { gap: .375rem; }
-.aspect-square { aspect-ratio: 1 / 1; }
-.text-\[10px\] { font-size: 10px; }
-.w-\[272px\] { width: 272px; }
-.bg-blue-100 { background-color: #dbeafe; }
-.text-blue-700 { color: #1d4ed8; }
-.text-blue-200 { color: #bfdbfe; }
-.text-blue-300 { color: #93c5fd; }
-.border-blue-400 { border-color: #60a5fa; }
-.border-blue-500 { border-color: #3b82f6; }
-.scale-105 { transform: scale(1.05); }
-.hover\:bg-white:hover { background-color: #ffffff; }
-.hover\:shadow-sm:hover { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); }
-.hover\:bg-slate-700:hover { background-color: #334155; }
+   Dark mode is a `.dark` class on the app root (see LearnexERP.jsx), so the
+   `dark:` variant follows the in-app switch, not the operating system.
+===================================================================== */
+@import "tailwindcss" source(none);
+@source "../components";
+@source "../app";
+@source "../lib";
 
-/* ---- Added by the accounting upgrade (financial statements UI) ---- */
-.pl-5 { padding-left: 1.25rem; }
-.px-1 { padding-left: .25rem; padding-right: .25rem; }
-.pt-4 { padding-top: 1rem; }
-.mt-5 { margin-top: 1.25rem; }
-.uppercase { text-transform: uppercase; }
-.tracking-wide { letter-spacing: .025em; }
-.text-amber-500 { color: #f59e0b; }
-.text-amber-700 { color: #b45309; }
-.text-slate-200 { color: #e2e8f0; }
-.text-slate-700 { color: #334155; }
-.text-emerald-700 { color: #047857; }
-.text-red-700 { color: #b91c1c; }
-.bg-emerald-50 { background-color: #ecfdf5; }
-.bg-amber-50 { background-color: #fffbeb; }
-.bg-red-50 { background-color: #fef2f2; }
-.bg-slate-50 { background-color: #f8fafc; }
-.border-emerald-200 { border-color: #a7f3d0; }
-.border-amber-200 { border-color: #fde68a; }
-.border-red-200 { border-color: #fecaca; }
-.border-blue-200 { border-color: #bfdbfe; }
-.min-w-\[900px\] { min-width: 900px; }
-.w-28 { width: 7rem; }
-.italic { font-style: italic; }
-@media (min-width:768px){ .md\:grid-cols-2 { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media (min-width:1280px){ .xl\:grid-cols-2 { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-/* New Sales Order: the wider form and its order item rows (product | qty | amount | remove). */
-.max-w-5xl { max-width: 64rem; }
-.col-span-3 { grid-column: span 3 / span 3; }
-.gap-x-2 { column-gap: 0.5rem; }
-.gap-y-1\.5 { row-gap: 0.375rem; }
-.h-\[42px\] { height: 42px; }
-.grid-cols-\[5\.5rem_minmax\(0\,1fr\)_2\.25rem\] { grid-template-columns: 5.5rem minmax(0,1fr) 2.25rem; }
-.grid-cols-\[minmax\(140px\,1fr\)_4\.75rem_6rem_6\.5rem_2\.25rem\] { grid-template-columns: minmax(140px, 1fr) 4.75rem 6rem 6.5rem 2.25rem; }
-.sales-order-item-row { display: grid; grid-template-columns: minmax(180px, 1fr) 5rem 6.5rem 7rem 2.5rem; column-gap: 0.5rem; align-items: center; }
-@media (min-width:1024px){ .lg\:grid { display: grid; } .lg\:col-span-1 { grid-column: span 1 / span 1; } .lg\:grid-cols-\[minmax\(0\,1fr\)_5\.5rem_7\.5rem_2\.25rem\] { grid-template-columns: minmax(0,1fr) 5.5rem 7.5rem 2.25rem; } .lg\:p-0 { padding: 0; } .lg\:border-0 { border-width: 0; } }
+@custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
 
+  /* Slightly tighter corners than Tailwind's defaults: cards 14px, controls 10px. */
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.875rem;
+
+  /* Softer, layered shadows (cool slate tint instead of pure black). */
+  --shadow-xs: 0 1px 1px 0 rgb(15 23 42 / 0.04);
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05), 0 1px 3px 0 rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 10px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 12px 24px -6px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+  --shadow-2xl: 0 28px 60px -12px rgb(15 23 42 / 0.35);
+
+  /* Accent shades nudged darker so figures and white-on-colour buttons reach WCAG AA (4.5:1). */
+  --color-emerald-600: #047857;
+  --color-emerald-700: #065f46;
+  --color-amber-600: #b45309;
+  --color-amber-700: #92400e;
+
+  --animate-fade-in: fade-in 0.18s ease-out both;
+  /* for whole screens: no fill after the end, so no stacking context is left behind to trap dialogs */
+  --animate-screen-in: fade-in 0.18s ease-out backwards;
+  --animate-pop-in: pop-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide-up: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide-in-left: slide-in-left 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* Old name, still used by the toast. */
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------------------------------------------------------------- base */
+@layer base {
+  /* Tailwind 4 borders default to currentColor; this app always meant a soft slate line. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-slate-200);
+  }
+  .dark *,
+  .dark ::after,
+  .dark ::before {
+    border-color: var(--color-slate-800);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background: var(--color-slate-50);
+    color: var(--color-slate-900);
+  }
+  .dark { color-scheme: dark; }
+
+  ::selection { background: rgb(37 99 235 / 0.2); }
+
+  button, [role="button"], summary, select, label[for], input[type="checkbox"], input[type="radio"], input[type="file"] {
+    cursor: pointer;
+  }
+  button:disabled, [role="button"][aria-disabled="true"], select:disabled, input:disabled, textarea:disabled {
+    cursor: not-allowed;
+  }
+  input:disabled, select:disabled, textarea:disabled { opacity: 0.6; }
+
+  /* Keyboard focus is always visible; mouse clicks do not draw a ring. */
+  :focus-visible {
+    outline: 2px solid var(--color-blue-500);
+    outline-offset: 2px;
+  }
+  /* Text fields show focus on their own border instead of an outline. */
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
+  input.border:focus,
+  select.border:focus,
+  textarea.border:focus {
+    border-color: var(--color-blue-500);
+    box-shadow: 0 0 0 3px rgb(59 130 246 / 0.18);
+  }
+  /* A composite field (icon + bare input inside a bordered wrapper) lights up as a whole. */
+  .field-shell:focus-within {
+    border-color: var(--color-blue-500);
+    box-shadow: 0 0 0 3px rgb(59 130 246 / 0.18);
+  }
+  /* The red asterisk of a required field is drawn by CSS so the label's own text stays exactly as written. */
+  label[data-required="true"]::after {
+    content: "*";
+    margin-left: 0.2rem;
+    color: var(--color-red-500);
+  }
+  input[type="number"] { font-variant-numeric: tabular-nums; }
+  input::placeholder, textarea::placeholder { opacity: 1; }
+  select { background-position: right 0.6rem center; }
+
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--color-blue-600); }
+
+  /* Slim scrollbars that match the surface. */
+  * { scrollbar-width: thin; scrollbar-color: rgb(148 163 184 / 0.55) transparent; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(148 163 184 / 0.45);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: rgb(100 116 139 / 0.7); background-clip: content-box; }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  h1, h2, h3, h4 { letter-spacing: -0.011em; }
+  h1 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+}
+
+/* --------------------------------------------------------------- tables
+   Unlayered on purpose: these must win over the one-off utility classes the
+   modules put on <th>/<td> so every table in the app reads the same.        */
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table > thead > tr > th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: rgb(248 250 252 / 0.9);
+}
+.dark table > thead > tr > th { background: rgb(15 23 42 / 0.9); }
+table > thead > tr > th:not([class*="text-right"]):not([class*="text-center"]) { text-align: left; }
+table > thead > tr { border-top-width: 1px; }
+table > thead > tr > th { border-bottom: 1px solid var(--color-slate-200); }
+.dark table > thead > tr > th { border-bottom-color: var(--color-slate-800); }
+table > tbody > tr > td { vertical-align: middle; }
+/* Header rows of tables inside a scroller stay visible while the page scrolls. */
+.table-sticky thead th { position: sticky; top: 0; z-index: 1; }
+
+/* ---------------------------------------------------- component classes */
+@layer components {
+  /* Buttons ----------------------------------------------------------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--radius-xl);
+    border: 1px solid transparent;
+    white-space: nowrap;
+    user-select: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+  }
+  .btn:active:not(:disabled) { transform: translateY(0.5px); }
+  .btn:disabled { opacity: 0.5; }
+  .btn-sm { font-size: 0.75rem; padding: 0.375rem 0.625rem; gap: 0.375rem; border-radius: var(--radius-lg); }
+  .btn-lg { font-size: 0.9375rem; padding: 0.7rem 1.1rem; }
+  .btn-block { width: 100%; }
+
+  .btn-primary {
+    background: var(--color-blue-600);
+    color: #fff;
+    box-shadow: 0 1px 2px 0 rgb(30 58 138 / 0.25), inset 0 1px 0 0 rgb(255 255 255 / 0.12);
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--color-blue-700); }
+  .btn-success { background: var(--color-emerald-600); color: #fff; box-shadow: 0 1px 2px 0 rgb(6 78 59 / 0.25), inset 0 1px 0 0 rgb(255 255 255 / 0.12); }
+  .btn-success:hover:not(:disabled) { background: var(--color-emerald-700); }
+  .btn-danger { background: var(--color-red-600); color: #fff; box-shadow: 0 1px 2px 0 rgb(127 29 29 / 0.25), inset 0 1px 0 0 rgb(255 255 255 / 0.12); }
+  .btn-danger:hover:not(:disabled) { background: var(--color-red-700); }
+  .btn-warning { background: var(--color-amber-600); color: #fff; box-shadow: 0 1px 2px 0 rgb(120 53 15 / 0.25), inset 0 1px 0 0 rgb(255 255 255 / 0.12); }
+  .btn-warning:hover:not(:disabled) { background: var(--color-amber-700); }
+
+  .btn-secondary {
+    background: #fff;
+    color: var(--color-slate-700);
+    border-color: var(--color-slate-200);
+    box-shadow: var(--shadow-xs);
+  }
+  .btn-secondary:hover:not(:disabled) { background: var(--color-slate-50); border-color: var(--color-slate-300); }
+  .dark .btn-secondary { background: var(--color-slate-800); color: var(--color-slate-100); border-color: var(--color-slate-700); box-shadow: none; }
+  .dark .btn-secondary:hover:not(:disabled) { background: var(--color-slate-700); border-color: var(--color-slate-600); }
+
+  .btn-soft { background: var(--color-blue-50); color: var(--color-blue-700); }
+  .btn-soft:hover:not(:disabled) { background: var(--color-blue-100); }
+  .dark .btn-soft { background: rgb(37 99 235 / 0.15); color: var(--color-blue-300); }
+  .dark .btn-soft:hover:not(:disabled) { background: rgb(37 99 235 / 0.25); }
+
+  .btn-ghost { background: transparent; color: var(--color-slate-600); }
+  .btn-ghost:hover:not(:disabled) { background: var(--color-slate-100); color: var(--color-slate-900); }
+  .dark .btn-ghost { color: var(--color-slate-300); }
+  .dark .btn-ghost:hover:not(:disabled) { background: var(--color-slate-800); color: #fff; }
+
+  .btn-danger-ghost { background: transparent; color: var(--color-red-600); }
+  .btn-danger-ghost:hover:not(:disabled) { background: var(--color-red-50); }
+  .dark .btn-danger-ghost { color: var(--color-red-400); }
+  .dark .btn-danger-ghost:hover:not(:disabled) { background: rgb(239 68 68 / 0.12); }
+
+  /* Square icon-only button (edit / delete / close ...). */
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: var(--radius-lg);
+    border: 1px solid transparent;
+    color: var(--color-slate-500);
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .btn-icon:hover:not(:disabled) { background: var(--color-slate-100); color: var(--color-slate-900); }
+  .dark .btn-icon { color: var(--color-slate-400); }
+  .dark .btn-icon:hover:not(:disabled) { background: var(--color-slate-800); color: #fff; }
+  .btn-icon-danger:hover:not(:disabled) { background: var(--color-red-50); color: var(--color-red-600); }
+  .dark .btn-icon-danger:hover:not(:disabled) { background: rgb(239 68 68 / 0.12); color: var(--color-red-400); }
+
+  /* Surfaces ----------------------------------------------------------- */
+  .card {
+    background: #fff;
+    border: 1px solid var(--color-slate-200);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-sm);
+  }
+  .dark .card { background: var(--color-slate-900); border-color: var(--color-slate-800); box-shadow: none; }
+
+  /* Form controls ------------------------------------------------------- */
+  .input {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--color-slate-200);
+    background: #fff;
+    color: var(--color-slate-900);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dark .input { background: var(--color-slate-800); border-color: var(--color-slate-700); color: var(--color-slate-100); }
+
+  /* Default width of a form control: lives in the components layer so any w-* utility on the same element wins. */
+  .input-fill { width: 100%; }
+
+  /* Loading placeholders ------------------------------------------------ */
+  .skeleton {
+    border-radius: var(--radius-lg);
+    background: linear-gradient(90deg, var(--color-slate-200) 25%, var(--color-slate-100) 37%, var(--color-slate-200) 63%);
+    background-size: 400% 100%;
+    animation: var(--animate-shimmer);
+  }
+  .dark .skeleton { background: linear-gradient(90deg, var(--color-slate-800) 25%, var(--color-slate-700) 37%, var(--color-slate-800) 63%); background-size: 400% 100%; }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.375rem;
+    height: 1.25rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    font-family: var(--font-sans);
+    border-radius: 0.375rem;
+    border: 1px solid var(--color-slate-200);
+    background: var(--color-slate-50);
+    color: var(--color-slate-500);
+  }
+  .dark .kbd { background: var(--color-slate-800); border-color: var(--color-slate-700); color: var(--color-slate-400); }
+}
+
+/* ------------------------------------------------------ dark-mode accents
+   Screens pick light-theme accent shades for figures and highlights; on the dark
+   surface the same colours are lifted a step so they stay readable. Unlayered so
+   they win over the plain utility classes.                                   */
+.dark .text-red-600, .dark .text-red-700 { color: var(--color-red-400); }
+.dark .text-emerald-600, .dark .text-emerald-700 { color: var(--color-emerald-400); }
+.dark .text-amber-600, .dark .text-amber-700 { color: var(--color-amber-400); }
+.dark .text-blue-600, .dark .text-blue-700 { color: var(--color-blue-400); }
+.dark .text-violet-600, .dark .text-violet-700 { color: var(--color-violet-400); }
+.dark .hover\:bg-red-50:hover { background-color: rgb(239 68 68 / 0.12); }
+.dark .bg-red-50 { background-color: rgb(239 68 68 / 0.1); }
+.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.1); }
+.dark .bg-amber-50 { background-color: rgb(245 158 11 / 0.1); }
+.dark .bg-blue-50 { background-color: rgb(59 130 246 / 0.1); }
+.dark .bg-white { background-color: var(--color-slate-900); }
+.dark .bg-slate-50 { background-color: rgb(30 41 59 / 0.5); }
+.dark .bg-slate-100 { background-color: var(--color-slate-800); }
+
+/* People who ask their system for less motion get none. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Printing an invoice or report: the app chrome stays off the paper. */
+@media print {
+  aside, header, .no-print { display: none !important; }
+  main { overflow: visible !important; padding: 0 !important; }
+  body { background: #fff !important; }
+}
+
+/* ------------------------------------- module-specific helpers (kept) */
+/* New Sales Order: an order item row is product | qty | price | amount | remove. */
+.sales-order-item-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 5rem 6.5rem 7rem 2.5rem;
+  column-gap: 0.5rem;
+  align-items: center;
+}

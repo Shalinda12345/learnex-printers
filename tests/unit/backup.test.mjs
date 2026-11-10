@@ -40,7 +40,7 @@ test("BAK-2 text is HTML-escaped in the readable part", () => {
 test("BAK-3 a record becomes one table row; nested values are shown as JSON", () => {
   assert.equal(
     backupRowToHTML({ a: 1, b: { x: 1 }, c: "<i>" }),
-    '<tr><td>1</td><td>{"x":1}</td><td>&lt;i&gt;</td></tr>',
+    '<tr><td>1</td><td>{&quot;x&quot;:1}</td><td>&lt;i&gt;</td></tr>',
   );
 });
 

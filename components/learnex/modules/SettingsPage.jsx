@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Toggle } from "@/components/learnex/ui";
+import { TabBar, Toggle } from "@/components/learnex/ui";
 import { Building2, Download, Save, Trash2 } from "@/components/learnex/icons";
 import { resetAllData } from "@/lib/learnex/persistence";
 import { downloadBackup, restoreFromBackup } from "@/lib/learnex/backup";
@@ -122,20 +122,10 @@ export function SettingsPage({
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold">Settings</h1>
+        <h2 className="text-xl font-bold">Settings</h2>
         <p className={`text-sm ${subText}`}>Manage your business profile, users and preferences</p>
       </div>
-      <div className="flex gap-2 flex-wrap">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${tab === t.key ? "bg-blue-600 text-white" : `border ${dark ? "border-slate-700 text-slate-300" : "border-slate-200 text-slate-600"}`}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={tabs} value={tab} onChange={setTab} dark={dark} />
       {tab === "business" && (
         <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm max-w-2xl space-y-5`}>
           <div className="flex items-center gap-2 mb-2">
@@ -143,16 +133,16 @@ export function SettingsPage({
             <h3 className="font-semibold">Business Profile</h3>
           </div>
           <div>
-            <label className={`text-xs font-medium ${subText}`}>Business Name</label>
-            <input
+            <label htmlFor="settings-business-name" className={`text-xs font-medium ${subText}`}>Business Name</label>
+            <input id="settings-business-name"
               value={form.businessName}
               onChange={(e) => setForm((f) => ({ ...f, businessName: e.target.value }))}
               className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
             />
           </div>
           <div>
-            <label className={`text-xs font-medium ${subText}`}>Business Address</label>
-            <textarea
+            <label htmlFor="settings-business-address" className={`text-xs font-medium ${subText}`}>Business Address</label>
+            <textarea id="settings-business-address"
               rows={2}
               value={form.businessAddress || ""}
               onChange={(e) => setForm((f) => ({ ...f, businessAddress: e.target.value }))}
@@ -161,16 +151,16 @@ export function SettingsPage({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={`text-xs font-medium ${subText}`}>Business Phone</label>
-              <input
+              <label htmlFor="settings-business-phone" className={`text-xs font-medium ${subText}`}>Business Phone</label>
+              <input id="settings-business-phone"
                 value={form.businessPhone || ""}
                 onChange={(e) => setForm((f) => ({ ...f, businessPhone: e.target.value }))}
                 className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
               />
             </div>
             <div>
-              <label className={`text-xs font-medium ${subText}`}>Business Email</label>
-              <input
+              <label htmlFor="settings-business-email" className={`text-xs font-medium ${subText}`}>Business Email</label>
+              <input id="settings-business-email"
                 type="email"
                 value={form.businessEmail || ""}
                 onChange={(e) => setForm((f) => ({ ...f, businessEmail: e.target.value }))}
@@ -179,8 +169,8 @@ export function SettingsPage({
             </div>
           </div>
           <div>
-            <label className={`text-xs font-medium ${subText}`}>Invoice Note</label>
-            <textarea
+            <label htmlFor="settings-invoice-note" className={`text-xs font-medium ${subText}`}>Invoice Note</label>
+            <textarea id="settings-invoice-note"
               rows={3}
               value={form.invoiceNote || ""}
               onChange={(e) => setForm((f) => ({ ...f, invoiceNote: e.target.value }))}
@@ -194,8 +184,8 @@ export function SettingsPage({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={`text-xs font-medium ${subText}`}>Default Tax Rate (%)</label>
-              <input
+              <label htmlFor="settings-default-tax-rate" className={`text-xs font-medium ${subText}`}>Default Tax Rate (%)</label>
+              <input id="settings-default-tax-rate"
                 type="number"
                 min="0"
                 step="0.01"
@@ -206,8 +196,8 @@ export function SettingsPage({
               />
             </div>
             <div>
-              <label className={`text-xs font-medium ${subText}`}>Opening Capital</label>
-              <input
+              <label htmlFor="settings-opening-capital" className={`text-xs font-medium ${subText}`}>Opening Capital</label>
+              <input id="settings-opening-capital"
                 type="number"
                 step="0.01"
                 inputMode="decimal"
@@ -222,8 +212,8 @@ export function SettingsPage({
               </p>
             </div>
             <div>
-              <label className={`text-xs font-medium ${subText}`}>Currency</label>
-              <select
+              <label htmlFor="settings-currency" className={`text-xs font-medium ${subText}`}>Currency</label>
+              <select id="settings-currency"
                 value={form.currency}
                 onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
                 className={`mt-1.5 w-full px-3 py-2.5 rounded-xl border text-sm ${inputBg}`}
@@ -236,7 +226,7 @@ export function SettingsPage({
           </div>
           <button
             onClick={saveChanges}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+            className="btn btn-primary"
           >
             <Save size={15} />
             {" Save Changes"}
@@ -265,6 +255,7 @@ export function SettingsPage({
               </p>
             </div>
             <Toggle
+              label="Low stock alerts"
               on={form.notifLowStock}
               onClick={() => setForm((f) => ({ ...f, notifLowStock: !f.notifLowStock }))}
             />
@@ -275,6 +266,7 @@ export function SettingsPage({
               <p className={`text-xs ${subText}`}>Notify when a customer payment becomes overdue.</p>
             </div>
             <Toggle
+              label="Overdue invoice alerts"
               on={form.notifOverdue}
               onClick={() => setForm((f) => ({ ...f, notifOverdue: !f.notifOverdue }))}
             />
@@ -287,13 +279,14 @@ export function SettingsPage({
               </p>
             </div>
             <Toggle
+              label="Daily summary email"
               on={form.notifDaily}
               onClick={() => setForm((f) => ({ ...f, notifDaily: !f.notifDaily }))}
             />
           </div>
           <button
             onClick={saveChanges}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+            className="btn btn-primary"
           >
             <Save size={15} />
             {" Save Preferences"}
@@ -328,7 +321,7 @@ export function SettingsPage({
               </p>
               <button
                 onClick={() => downloadBackup(backupStore, setToast)}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+                className="btn btn-primary"
               >
                 <Download size={15} />
                 {" Download Backup"}
@@ -343,7 +336,7 @@ export function SettingsPage({
                 replace what&apos;s currently in the system, and is saved to the database straight away. Use
                 this to recover from a mistake or to move data over from another installation.
               </p>
-              <input
+              <input aria-label="Backup file to restore"
                 type="file"
                 accept=".html,.json"
                 onChange={(e) => {
@@ -377,12 +370,13 @@ export function SettingsPage({
                   );
                   e.target.value = "";
                 }}
-                className={`block w-full text-sm rounded-xl border p-2.5 ${inputBg}`}
+                className={`block w-full text-sm rounded-xl border p-2 ${inputBg} file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3.5 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-blue-700 file:cursor-pointer`}
               />
             </div>
           )}
           {auth.can("data.reset") && (
             <>
+              <h2 className="pt-2 text-xs font-semibold uppercase tracking-wider text-red-600">Danger zone</h2>
               <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm space-y-3`}>
                 <h3 className="font-semibold mb-1">Clear a Specific Module</h3>
                 <p className={`text-sm ${subText} mb-2`}>
@@ -414,7 +408,9 @@ export function SettingsPage({
                   ))}
                 </div>
               </div>
-              <div className={`rounded-2xl border p-6 ${cardBg} shadow-sm space-y-3`}>
+              <div
+                className={`rounded-2xl border p-6 shadow-sm space-y-3 ${dark ? "bg-slate-900 border-red-500/30" : "bg-red-50/50 border-red-200"}`}
+              >
                 <h3 className="font-semibold mb-1 text-red-600">Factory Reset</h3>
                 <p className={`text-sm ${subText}`}>
                   This clears absolutely everything — every module above, plus the business settings — and
@@ -430,7 +426,7 @@ export function SettingsPage({
                     )
                       resetAllData();
                   }}
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-red-900/20 transition-colors"
+                  className="btn btn-danger"
                 >
                   <Trash2 size={15} />
                   {" Factory Reset Everything"}

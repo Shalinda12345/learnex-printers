@@ -12,6 +12,7 @@ import {
   DEFAULT_ROLES,
   OWNER_ROLE_KEY,
   SCREEN_PERMISSIONS,
+  WHOLE_MODULE_PERMISSIONS,
 } from "@/lib/auth/permissions";
 
 test("PERM-1 every permission has a unique key, a group, a label and a description", () => {
@@ -100,4 +101,14 @@ test("PERM-9 every screen in the menu is opened by real permissions", () => {
 
 test("PERM-10 every module has a human-readable name for messages", () => {
   assert.deepEqual(Object.keys(STORE_LABELS).sort(), [...STORE_KEYS].sort());
+});
+
+test("PERM-11 only the restore and reset permissions can replace or empty a whole module", () => {
+  assert.deepEqual([...WHOLE_MODULE_PERMISSIONS], ["data.restore", "data.reset"]);
+  for (const k of WHOLE_MODULE_PERMISSIONS) assert.ok(isPermission(k), k);
+  const holds = (role) => role.permissions.some((p) => WHOLE_MODULE_PERMISSIONS.includes(p));
+  // the owner's own list is empty on purpose: the owner always has every permission
+  assert.deepEqual(DEFAULT_ROLES.filter(holds).map((r) => r.key), ["administrator"]);
+  for (const key of ["sales", "inventory", "accountant"])
+    assert.ok(!holds(DEFAULT_ROLES.find((r) => r.key === key)), key);
 });

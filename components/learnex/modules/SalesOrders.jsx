@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { AttachmentLink, Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
+import { AttachmentLink, Badge, EmptyState, Field, FileUpload, Modal, SearchInput, StatCard, inputCls } from "@/components/learnex/ui";
 import { MAIN_CASH_ID, nextTxnId } from "@/lib/learnex/accounting";
 import { balanceOf as balOf, openInvoice, paidOf } from "@/lib/learnex/invoice";
-import { Plus, Printer, Save, Search, Trash2, Wallet } from "@/components/learnex/icons";
+import { Plus, Printer, Save, Trash2, Wallet } from "@/components/learnex/icons";
 import { fmtDate, money, nextSeqId, numVal, round2, todayISO } from "@/lib/learnex/utils";
 
 /* =====================================================================
@@ -119,7 +119,7 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
                       style={itemRowStyle}
                     >
                       <div className="min-w-0">
-                        <select
+                        <select aria-label="Product"
                           value={it.productId}
                           onChange={(e) => onProductChange(i, e.target.value)}
                           title={product ? product.name : ""}
@@ -223,7 +223,7 @@ export function SalesOrderModal({ onClose, onSave, dark, cardBg, subText, inputB
         </div>
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} />
           {" Create Sales Order"}
@@ -309,7 +309,7 @@ export function ReturnModal({ order, onClose, onSave, dark, cardBg, subText, inp
         <button
           type="submit"
           disabled={!line || qtyN < 1 || qtyN > line.qty}
-          className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md transition-colors disabled:opacity-40"
+          className="btn btn-warning btn-block"
         >
           {" Record Return"}
         </button>
@@ -333,8 +333,9 @@ export function SalesOrders({
   ledger,
   setLedger,
   settings,
+  seed,
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(seed || "");
   const [statusFilter, setStatusFilter] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -670,7 +671,7 @@ export function SalesOrders({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Sales Orders</h1>
+          <h2 className="text-xl font-bold">Sales Orders</h2>
           <p className={`text-sm ${subText}`}>
             {salesOrders.length}
             {" orders on record"}
@@ -679,7 +680,7 @@ export function SalesOrders({
         <button
           onClick={() => setModalOpen(true)}
           disabled={customers.length === 0 || products.length === 0}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors disabled:opacity-40"
+          className="btn btn-primary"
         >
           <Plus size={16} />
           {" New Order"}
@@ -712,17 +713,9 @@ export function SalesOrders({
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border w-full sm:w-72 ${inputBg}`}>
-            <Search size={15} className={subText} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search order # or customer..."
-              className="bg-transparent outline-none text-sm w-full"
-            />
-          </div>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search order # or customer..." inputBg={inputBg} subText={subText} className="w-full sm:w-72" />
           <div className="flex gap-2">
-            <select
+            <select aria-label="Filter by status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className={`text-xs px-3 py-2 rounded-xl border ${inputBg}`}
@@ -731,7 +724,7 @@ export function SalesOrders({
                 <option key={s}>{s}</option>
               ))}
             </select>
-            <select
+            <select aria-label="Filter by order type"
               value={kindFilter}
               onChange={(e) => setKindFilter(e.target.value)}
               className={`text-xs px-3 py-2 rounded-xl border ${inputBg}`}
@@ -768,7 +761,7 @@ export function SalesOrders({
                   className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
                   onClick={() => setSelected(o)}
                 >
-                  <td className="py-3 px-5 font-medium">{o.id}</td>
+                  <td className="py-3 px-5 font-medium whitespace-nowrap">{o.id}</td>
                   <td className="py-3 px-2">
                     <div className="flex items-center gap-2">
                       <span>{o.customer}</span>
@@ -781,8 +774,8 @@ export function SalesOrders({
                     )}
                   </td>
                   <td className={`py-3 px-2 ${subText}`}>{o.items}</td>
-                  <td className="py-3 px-2 font-medium">{money(o.amount)}</td>
-                  <td className={`py-3 px-2 ${subText}`}>{money(paidOf(o))}</td>
+                  <td className="py-3 px-2 font-medium whitespace-nowrap">{money(o.amount)}</td>
+                  <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{money(paidOf(o))}</td>
                   <td
                     className={`py-3 px-2 font-medium ${balOf(o) > 0 ? "text-amber-600" : "text-emerald-600"}`}
                   >
@@ -794,7 +787,7 @@ export function SalesOrders({
                   <td className="py-3 px-2">
                     <Badge tone={paymentTone[o.payment] || "slate"}>{o.payment}</Badge>
                   </td>
-                  <td className={`py-3 px-2 ${subText}`}>{fmtDate(o.date)}</td>
+                  <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{fmtDate(o.date)}</td>
                   <td className="py-3 px-2">
                     <AttachmentLink attachment={o.attachment} subText={subText} />
                   </td>
@@ -807,7 +800,7 @@ export function SalesOrders({
                             setPayAmt("");
                             setSelected(o);
                           }}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white"
+                          className="btn btn-success btn-sm"
                         >
                           Collect
                         </button>
@@ -818,7 +811,7 @@ export function SalesOrders({
                           printInvoice(o);
                         }}
                         title={`Print invoice ${o.invoice || o.id}`}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border ${dark ? "border-slate-700 text-slate-300 hover:bg-slate-800" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                        className="btn btn-secondary btn-sm"
                       >
                         <Printer size={12} />
                         {" Invoice"}
@@ -840,6 +833,8 @@ export function SalesOrders({
                           deleteOrder(o);
                         }}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -849,8 +844,8 @@ export function SalesOrders({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} className={`text-center py-10 text-sm ${subText}`}>
-                    No orders match these filters.
+                  <td colSpan={11} className="py-2">
+                    <EmptyState compact subText={subText} title="No orders match these filters." />
                   </td>
                 </tr>
               )}
@@ -922,8 +917,8 @@ export function SalesOrders({
                         <tr key={i} className="py-1">
                           <td className="py-1.5 font-medium">{li.name}</td>
                           <td className="text-center py-1.5">{li.qty}</td>
-                          <td className="text-right py-1.5">{money(li.price)}</td>
-                          <td className="text-right py-1.5 font-semibold">{money(li.price * li.qty)}</td>
+                          <td className="text-right py-1.5 whitespace-nowrap">{money(li.price)}</td>
+                          <td className="text-right py-1.5 font-semibold whitespace-nowrap">{money(li.price * li.qty)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -981,7 +976,7 @@ export function SalesOrders({
                   </div>
                   <button
                     onClick={() => recordPayment(selected, payAmt)}
-                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-emerald-900/20 transition-colors h-[42px] shrink-0"
+                    className="btn btn-success h-[42px] shrink-0"
                   >
                     <Wallet size={15} />
                     {" Record"}
@@ -1008,7 +1003,7 @@ export function SalesOrders({
             <AttachmentLink attachment={selected.attachment} subText={subText} />
             <button
               onClick={() => printInvoice(selected)}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors mt-2"
+              className="btn btn-primary btn-block mt-2"
             >
               <Printer size={14} />
               {" Print Invoice"}
@@ -1032,13 +1027,13 @@ export function SalesOrders({
                 setSelected(null);
               }}
               disabled={!(selected.lineItems && selected.lineItems.length > 0)}
-              className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md transition-colors mt-2 disabled:opacity-40"
+              className="btn btn-warning btn-block mt-2"
             >
               {" Return Items"}
             </button>
             <button
               onClick={() => deleteOrder(selected)}
-              className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-red-900/20 transition-colors mt-2"
+              className="btn btn-danger btn-block mt-2"
             >
               <Trash2 size={14} />
               {" Delete Order"}
