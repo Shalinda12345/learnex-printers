@@ -1,4 +1,4 @@
-import { readJson, respond } from "@/lib/server/learnex/http";
+import { BODY_LIMITS, readJson, respond } from "@/lib/server/learnex/http";
 import { requirePermission, requireSameOrigin, requireUser } from "@/lib/server/auth/dal";
 import { deleteRole, updateRole } from "@/lib/server/auth/admin";
 
@@ -8,7 +8,7 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/roles/[id]
     requireSameOrigin(request);
     const user = await requireUser();
     requirePermission(user, "roles.manage");
-    await updateRole(user, (await ctx.params).id, await readJson(request));
+    await updateRole(user, (await ctx.params).id, await readJson(request, BODY_LIMITS.admin));
   });
 }
 

@@ -16,6 +16,9 @@ import { DEFAULT_ROLES, OWNER_ROLE_KEY } from "@/lib/auth/permissions";
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
+// Kept short on purpose: anyone who knows a username can cause these locks, so a long
+// one would let a stranger keep the owner out of the system for a day.
+const MAX_LOCK_MINUTES = 60;
 
 const asText = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 export const USERNAME_RULE = /^[a-zA-Z0-9._@-]{3,64}$/;
@@ -46,6 +49,27 @@ export function validateProfile(
     out.email = email || null;
   }
   return out;
+}
+
+/**
+ * Sign-in accepts a username or an email, and prefers the username. So nobody may have a
+ * username that is another account's email (or an email that is another's username):
+ * the real owner of that email would otherwise sign in to the wrong account.
+ * `selfId` is the account being edited (0 for a new one).
+ */
+export async function assertNoIdentityClash(
+  db: Pick<PoolConnection, "query">,
+  username: string | undefined,
+  email: string | null | undefined,
+  selfId = 0,
+) {
+  // (username against username, and email against email, are the unique keys' job)
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT 1 FROM auth_users WHERE id <> ? AND (email_key = lower(?) OR username_key = lower(?)) LIMIT 1`,
+    [selfId, username ?? "", email ?? ""],
+  );
+  if (rows.length)
+    throw new ConflictError("That username or email clashes with another account's email or username.");
 }
 
 export function uniqueViolation(e: unknown): HttpError | null {
@@ -137,66 +161,143 @@ export async function setupOwner(input: Record<string, unknown>, request: Reques
 
 const INVALID = () => new UnauthorizedError("Incorrect username or password.", "invalid_credentials");
 
+/** Lock after 5 failures; each further failure (once a lock has ended) doubles the lock, up to 24 hours. */
+const lockMinutesFor = (failures: number) =>
+  failures >= MAX_FAILED_LOGINS
+    ? Math.min(LOCK_MINUTES * 2 ** (failures - MAX_FAILED_LOGINS), MAX_LOCK_MINUTES)
+    : 0;
+
+/** The one answer for a locked account, whether or not the account exists. */
+function lockedError(until: Date | number) {
+  const minutes = Math.max(1, Math.ceil((new Date(until).getTime() - Date.now()) / 60000));
+  return new HttpError(
+    429,
+    `Too many failed attempts. Try again in ${minutes} minute(s), or ask an administrator to reset your password.`,
+    "locked",
+  );
+}
+
+// The longest a real sign-in name can be is an email address. A longer one is
+// not an account, so it is not worth a database lookup (or space in the log).
+const MAX_LOGIN_NAME = 254;
+const shorten = (text: string, max = 100) => (text.length > max ? text.slice(0, max) + "…" : text);
+
+/**
+ * Names that are not accounts get the same attempt counting and the same lock
+ * as real ones. Otherwise "Too many failed attempts" (429) next to "Incorrect
+ * username or password" (401) would tell an attacker which names exist. Kept in
+ * memory (a lock on a name nobody has is not worth a table), limited in size,
+ * and forgotten when the server restarts.
+ */
+const MAX_GHOSTS = 100_000; // large, so filling it up to push names out is not practical
+const ghosts = new Map<string, { failures: number; lockedUntil: number }>();
+function reserveGhostAttempt(username: string) {
+  const key = username.toLowerCase().slice(0, 100);
+  const now = Date.now();
+  const known = ghosts.get(key);
+  if (known && known.lockedUntil > now) return { locked: true as const, until: known.lockedUntil };
+  const failures = (known?.failures ?? 0) + 1;
+  const lockMinutes = lockMinutesFor(failures);
+  ghosts.delete(key); // re-inserted: the Map keeps the least recently used name first
+  ghosts.set(key, { failures, lockedUntil: lockMinutes ? now + lockMinutes * 60_000 : (known?.lockedUntil ?? 0) });
+  if (ghosts.size > MAX_GHOSTS) ghosts.delete(ghosts.keys().next().value as string);
+  return { locked: false as const, failures, lockMinutes };
+}
+
+/**
+ * Takes one of an account's sign-in attempts BEFORE its password is checked.
+ *
+ * Counting after the check (read the counter, spend ~0.3 s verifying the
+ * password, write counter + 1) lets any number of simultaneous guesses read the
+ * same old value: 30 parallel wrong passwords left the counter at 1 and the
+ * account never locked. Here the account's row is locked only for the few
+ * milliseconds it takes to count (never while hashing, so no database
+ * connection is tied up), so every attempt gets its own number, and the 5th
+ * takes the lock straight away. Guess 6 and later are refused without being
+ * checked, however many arrive at once. A correct password clears the count.
+ */
+async function reserveLoginAttempt(userId: number) {
+  return withTransaction(async (conn) => {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT failed_login_count AS failures, locked_until,
+              (locked_until IS NOT NULL AND locked_until > NOW(6)) AS locked
+       FROM auth_users WHERE id = ? FOR UPDATE`,
+      [userId],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    if (Number(row.locked)) return { locked: true as const, until: row.locked_until as Date };
+    const failures = Number(row.failures) + 1;
+    const lockMinutes = lockMinutesFor(failures);
+    await conn.query(
+      `UPDATE auth_users SET failed_login_count = ?,
+         locked_until = CASE WHEN ? > 0 THEN NOW(6) + INTERVAL ? MINUTE ELSE locked_until END
+       WHERE id = ?`,
+      [failures, lockMinutes, lockMinutes, userId],
+    );
+    return { locked: false as const, failures, lockMinutes };
+  });
+}
+
 export async function login(input: Record<string, unknown>, request: Request) {
   const username = asText(input.username);
   const password = typeof input.password === "string" ? input.password : "";
   if (!username || !password) throw new BadRequestError("Enter your username and password.");
 
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, username, password_hash, status, failed_login_count, locked_until
-     FROM auth_users WHERE username_key = lower(?) OR email_key = lower(?)
-     ORDER BY username_key = lower(?) DESC LIMIT 1`,
-    [username, username, username],
-  );
-  const user = rows[0];
+  let user: RowDataPacket | undefined;
+  if (username.length <= MAX_LOGIN_NAME) {
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, username, password_hash, status
+       FROM auth_users WHERE username_key = lower(?) OR email_key = lower(?)
+       ORDER BY username_key = lower(?) DESC LIMIT 1`,
+      [username, username, username],
+    );
+    user = rows[0];
+  }
   if (!user) {
+    const ghost = reserveGhostAttempt(username); // counted and locked like a real account
     await burnPasswordCheck(password); // same timing as a real account
-    await audit(null, "auth.login_failed", username, { reason: "unknown_user" });
-    throw INVALID();
+    await audit(null, "auth.login_failed", shorten(username), {
+      reason: "unknown_user",
+      locked: ghost.locked || undefined,
+    });
+    throw ghost.locked ? lockedError(ghost.until) : INVALID();
   }
   const actor = { userId: Number(user.id), username: user.username };
-  if (user.locked_until && user.locked_until.getTime() > Date.now()) {
+
+  // This attempt is counted (and the account possibly locked) before the password is looked at.
+  const attempt = await reserveLoginAttempt(Number(user.id));
+  if (!attempt) {
     await burnPasswordCheck(password);
-    const minutes = Math.ceil((user.locked_until.getTime() - Date.now()) / 60000);
+    throw INVALID();
+  }
+  if (attempt.locked) {
+    await burnPasswordCheck(password);
     await audit(actor, "auth.login_failed", user.username, { reason: "locked" });
-    throw new HttpError(
-      429,
-      `Too many failed attempts. Try again in ${minutes} minute(s), or ask an administrator to reset your password.`,
-      "locked",
-    );
+    throw lockedError(attempt.until);
   }
 
   const { ok, needsRehash } = await verifyPassword(password, user.password_hash);
   if (!ok) {
-    const failures = user.failed_login_count + 1;
-    // Lock after 5 failures; each further failure doubles the lock (max 24h).
-    const lockMinutes =
-      failures >= MAX_FAILED_LOGINS
-        ? Math.min(LOCK_MINUTES * 2 ** (failures - MAX_FAILED_LOGINS), 24 * 60)
-        : 0;
-    await pool.query(
-      `UPDATE auth_users SET failed_login_count = ?,
-         locked_until = CASE WHEN ? > 0 THEN NOW(6) + INTERVAL ? MINUTE ELSE locked_until END
-       WHERE id = ?`,
-      [failures, lockMinutes, lockMinutes, user.id],
-    );
     await audit(actor, "auth.login_failed", user.username, {
       reason: "wrong_password",
-      failures,
-      lockedMinutes: lockMinutes || undefined,
+      failures: attempt.failures,
+      lockedMinutes: attempt.lockMinutes || undefined,
     });
     throw INVALID();
   }
-  if (user.status !== "active") {
+
+  // The password is right, so this attempt (already counted above) was not a failure after all.
+  const active = user.status === "active";
+  await pool.query(
+    `UPDATE auth_users SET failed_login_count = 0, locked_until = NULL
+       ${active ? ", last_login_at = NOW(6)" : ""}${active && needsRehash ? ", password_hash = ?" : ""} WHERE id = ?`,
+    active && needsRehash ? [await hashPassword(password), user.id] : [user.id],
+  );
+  if (!active) {
     await audit(actor, "auth.login_failed", user.username, { reason: "disabled" });
     throw new ForbiddenError("This account has been disabled. Ask an administrator.", "disabled");
   }
-
-  await pool.query(
-    `UPDATE auth_users SET failed_login_count = 0, locked_until = NULL, last_login_at = NOW(6)
-       ${needsRehash ? ", password_hash = ?" : ""} WHERE id = ?`,
-    needsRehash ? [await hashPassword(password), user.id] : [user.id],
-  );
   await createSession(Number(user.id), request);
   await audit(actor, "auth.login", user.username, {
     userAgent: request.headers.get("user-agent")?.slice(0, 120),

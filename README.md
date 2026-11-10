@@ -53,6 +53,44 @@ Microsoft Edge instead). Pass file names to run only some suites, e.g.
 `npm run test:db -- 06-sales 07-stock`. `10-statements` is the end-to-end suite for the four
 financial statements (Profit or Loss, Financial Position, Cash Flows, Changes in Equity).
 
+## Security settings
+
+**Sign-in limits.** Each sign-in attempt costs the server about 0.3 s of CPU and 64 MB of memory (the password
+hash), so attempts are limited: by default one client may try 20 times a minute (`AUTH_RATE_LIMIT`,
+`AUTH_RATE_WINDOW_SECONDS` in `.env`; `0` switches the limit off). There is deliberately no limit shared by
+everybody, since a stranger could use it up and block every real sign-in; instead at most 4 passwords are hashed at
+once and the rest wait their turn. A client is told when to try again. On top of that, five wrong passwords lock an
+account for 15 minutes (doubling each time, at most 1 hour, so a stranger cannot keep the owner out for long), and a name that is not an account is counted and locked the same way, so the answer never
+reveals which names exist. Requests to the sign-in endpoints are limited in size (16 KB).
+
+The client is identified by the `X-Forwarded-For` address. Next fills that header in only when the request does not
+carry one, so when browsers connect to the app directly a client that sends its own header can pretend to be someone
+else; the hashing queue is the backstop that cannot be avoided that way. Behind a reverse proxy
+that sets the header, the address is reliable (`TRUST_PROXY_HOPS` = how many proxies are in front, default 1).
+
+**HTTPS.** The app itself only speaks plain HTTP, so on a shop network passwords travel unencrypted. To fix that,
+put a reverse proxy that handles HTTPS in front of it and let only the proxy reach the app. For example with
+[Caddy](https://caddyserver.com) (not set up on this PC; the client PCs must trust Caddy's certificate authority):
+
+```
+shop.lan {
+    tls internal
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+and start the app on the local address only: `npm start -- -H 127.0.0.1`. Requests that arrive over HTTPS are
+recognised (`X-Forwarded-Proto`): the session cookie becomes Secure and `__Host-`prefixed, and the app sends
+`Strict-Transport-Security`. Once the proxy works, set `AUTH_REQUIRE_HTTPS=1` in `.env`: sign-in and password
+changes are then refused over plain HTTP. Every response already carries `X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`, `Permissions-Policy` and, for pages, a `Content-Security-Policy` with a per-request nonce
+(`proxy.ts`).
+
+**What is checked on saved data.** The browser works out every figure, so the server refuses values that can never
+be right from any account that cannot restore a backup: negative prices, costs, totals or stock, an order paid
+for more than it is worth, dates before 2000 or more than a month ahead (`lib/server/learnex/sanity.ts`). Replacing
+or emptying a whole module in one request needs the *Restore & import* or *Clear & factory reset* permission.
+
 ## Project layout
 
 ```
@@ -71,6 +109,19 @@ db/migrations/          SQL schema, applied in filename order by db:setup
 scripts/                db:setup and the database test runner
 tests/                  Database/API/UI suites (tests/*.test.mjs) and unit tests (tests/unit)
 ```
+
+### The interface
+
+- **Styling** is Tailwind CSS v4. `app/globals.css` holds the design tokens (type, radius, shadows, accent
+  shades), element defaults and the shared classes (`.btn`, `.btn-primary`, `.card`, `.input`, ...). Dark mode is a
+  `.dark` class on the app root; the choice (and whether the menu is collapsed) is remembered in the browser.
+- **Shared pieces** live in `components/learnex/ui.jsx` (dialogs, form fields, badges, summary cards, empty states,
+  alerts, tabs, toasts). `gate.jsx` styles the screens shown before sign-in; `CommandPalette.jsx` is the search
+  box in the top bar.
+- **Keyboard:** `Ctrl+K` (or `/`) opens the search, which jumps to any screen or record; `Esc` closes dialogs
+  and menus; in the POS, `Enter` in the search box adds the product whose SKU matches (what a barcode scanner sends).
+- The browser tests find things by a few class names and exact label texts (see the helpers at the end of
+  `tests/helpers.mjs`). When restyling, keep those, or update the helpers with the change.
 
 ### How data is saved
 

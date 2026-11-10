@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Badge, inputCls } from "@/components/learnex/ui";
+import { Badge, EmptyState, Skeleton, inputCls } from "@/components/learnex/ui";
 import { listAudit } from "@/lib/learnex/auth-client";
 import { STORE_LABELS } from "@/lib/auth/permissions";
 
@@ -109,12 +109,12 @@ export function ActivityLog({ dark, cardBg, subText, inputBg, hoverRow }) {
             Newest first. Entries can&apos;t be edited or deleted from the app.
           </p>
         </div>
-        <div className="flex gap-2">
-          <select
+        <div className="flex gap-2 flex-wrap">
+          <select aria-label="Filter by action"
             value={action}
             onChange={(e) => setAction(e.target.value)}
             className={inputCls(inputBg)}
-            style={{ width: 200 }}
+            style={{ maxWidth: 200 }}
           >
             {FILTERS.map((f) => (
               <option key={f.value} value={f.value}>
@@ -122,12 +122,12 @@ export function ActivityLog({ dark, cardBg, subText, inputBg, hoverRow }) {
               </option>
             ))}
           </select>
-          <input
+          <input aria-label="Filter by username"
             value={user}
             onChange={(e) => setUser(e.target.value)}
             placeholder="Filter by username"
             className={inputCls(inputBg)}
-            style={{ width: 180 }}
+            style={{ maxWidth: 180 }}
           />
         </div>
       </div>
@@ -163,8 +163,16 @@ export function ActivityLog({ dark, cardBg, subText, inputBg, hoverRow }) {
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={3} className={`text-center py-10 text-sm ${subText}`}>
-                  {loaded ? "No activity matches." : "Loading…"}
+                <td colSpan={3} className="py-2">
+                  {loaded ? (
+                    <EmptyState compact subText={subText} title="No activity matches." />
+                  ) : (
+                    <div className="space-y-3 p-4" role="status" aria-label="Loading">
+                      {[0, 1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-5 w-full" />
+                      ))}
+                    </div>
+                  )}
                 </td>
               </tr>
             )}
@@ -175,7 +183,7 @@ export function ActivityLog({ dark, cardBg, subText, inputBg, hoverRow }) {
         <div className="p-4 text-center">
           <button
             onClick={() => load(nextBefore)}
-            className={`text-sm font-medium px-4 py-2 rounded-xl border ${dark ? "border-slate-700" : "border-slate-200"}`}
+            className="btn btn-secondary"
           >
             Show older entries
           </button>

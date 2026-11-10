@@ -11,7 +11,22 @@ export type Db = Pick<PoolConnection, "query">;
 const SESSION_SETUP =
   "SET SESSION time_zone = '+00:00', sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'";
 
+// The app only needs its own database. As root it could read and change every
+// other database on the server (and, if it were ever tricked into running SQL,
+// much more), so say so loudly instead of silently working.
+function warnIfAdministrator() {
+  try {
+    if (decodeURIComponent(new URL(process.env.DATABASE_URL ?? "").username).toLowerCase() === "root") {
+      console.warn(
+        "[db] DATABASE_URL logs in as the MySQL administrator (root). Use the limited account that " +
+          "`npm run db:setup` creates for this app instead (see .env.example).",
+      );
+    }
+  } catch {}
+}
+
 function createPool() {
+  warnIfAdministrator();
   const pool = mysql.createPool({
     uri: process.env.DATABASE_URL,
     connectionLimit: 10,

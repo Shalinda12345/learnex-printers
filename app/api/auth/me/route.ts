@@ -7,10 +7,12 @@ import { hasAnyUser, setupCodeConfigured } from "@/lib/server/auth/accounts";
 export async function GET() {
   return respond(async () => {
     const user = await getSessionUser();
+    const setupRequired = !(await hasAnyUser());
     return {
       user: user ? publicUser(user) : null,
-      setupRequired: !(await hasAnyUser()),
-      setupAvailable: setupCodeConfigured(),
+      setupRequired,
+      // only meaningful (and only told) while the owner account is still to be created
+      setupAvailable: setupRequired && setupCodeConfigured(),
     };
   });
 }

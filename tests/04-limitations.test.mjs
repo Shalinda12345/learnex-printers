@@ -3,8 +3,7 @@
 // is fixed, its test will fail and should be turned into a regular test.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
-import path from "node:path";
+import { execFileSync } from "node:child_process";
 import {
   asOwner,
   api,
@@ -84,23 +83,3 @@ test("LIMIT-3 [known] two PCs selling at the same time: one sale and one stock u
   await pcB.context().close();
 });
 
-test("LIMIT-4 [known] npm audit reports a critical advisory for the installed `next`", async (t) => {
-  const npmCli = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
-  const r = spawnSync(process.execPath, [npmCli, "audit", "--json"], { encoding: "utf8" });
-  let report;
-  try {
-    report = JSON.parse(r.stdout);
-  } catch {
-    t.skip("npm audit unavailable (offline?)");
-    return;
-  }
-  const next = report.vulnerabilities?.next;
-  log(
-    `next: severity=${next?.severity}; ${(next?.via || [])
-      .filter((v) => typeof v === "object")
-      .map((v) => v.title)
-      .slice(0, 2)
-      .join(" | ")}`,
-  );
-  assert.equal(next?.severity, "critical");
-});

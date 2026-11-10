@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Badge, Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
-import { Mail, Save, Search, Trash2, UserPlus } from "@/components/learnex/icons";
+import { Badge, EmptyState, Field, Modal, SearchInput, StatCard, inputCls } from "@/components/learnex/ui";
+import { Mail, Save, Trash2, UserPlus } from "@/components/learnex/icons";
 import { money, nextNumId } from "@/lib/learnex/utils";
 
 /* =====================================================================
@@ -39,7 +39,7 @@ export function CustomerModal({ onClose, onSave, dark, cardBg, subText, inputBg 
         </Field>
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} />
           {" Add Customer"}
@@ -48,8 +48,8 @@ export function CustomerModal({ onClose, onSave, dark, cardBg, subText, inputBg 
     </Modal>
   );
 }
-export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, customers, setCustomers }) {
-  const [query, setQuery] = useState("");
+export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, customers, setCustomers, seed }) {
+  const [query, setQuery] = useState(seed || "");
   const [tierFilter, setTierFilter] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
   const tiers = ["All", "Wholesale", "Retail"];
@@ -74,7 +74,7 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Customers</h1>
+          <h2 className="text-xl font-bold">Customers</h2>
           <p className={`text-sm ${subText}`}>
             {customers.length}
             {" customer accounts"}
@@ -82,7 +82,7 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary"
         >
           <UserPlus size={16} />
           {" Add Customer"}
@@ -107,16 +107,8 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border w-full sm:w-72 ${inputBg}`}>
-            <Search size={15} className={subText} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search customer..."
-              className="bg-transparent outline-none text-sm w-full"
-            />
-          </div>
-          <select
+          <SearchInput value={query} onChange={setQuery} placeholder="Search customer..." inputBg={inputBg} subText={subText} className="w-full sm:w-72" />
+          <select aria-label="Filter by tier"
             value={tierFilter}
             onChange={(e) => setTierFilter(e.target.value)}
             className={`text-xs px-3 py-2 rounded-xl border ${inputBg}`}
@@ -159,7 +151,7 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
                     <Badge tone={c.tier === "Wholesale" ? "blue" : "slate"}>{c.tier}</Badge>
                   </td>
                   <td className={`py-3 px-2 ${subText}`}>{c.orders}</td>
-                  <td className="py-3 px-2 font-medium">{money(c.spent)}</td>
+                  <td className="py-3 px-2 font-medium whitespace-nowrap">{money(c.spent)}</td>
                   <td className="py-3 px-2">
                     {c.outstanding > 0 ? (
                       <span className="text-red-600 font-medium">{money(c.outstanding)}</span>
@@ -172,6 +164,8 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
                       <button
                         onClick={() => deleteCustomer(c)}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -181,8 +175,8 @@ export function Customers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className={`text-center py-10 text-sm ${subText}`}>
-                    No customers match these filters.
+                  <td colSpan={7} className="py-2">
+                    <EmptyState compact subText={subText} title="No customers match these filters." />
                   </td>
                 </tr>
               )}

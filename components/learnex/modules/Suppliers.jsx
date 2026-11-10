@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Badge, Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
-import { Building2, Phone, Plus, Save, Search, Trash2 } from "@/components/learnex/icons";
+import { Badge, EmptyState, Field, Modal, SearchInput, StatCard, inputCls } from "@/components/learnex/ui";
+import { Building2, Phone, Plus, Save, Trash2 } from "@/components/learnex/icons";
 import { fmtDate, money, nextNumId } from "@/lib/learnex/utils";
 
 /* =====================================================================
@@ -56,7 +56,7 @@ export function SupplierModal({ onClose, onSave, dark, cardBg, subText, inputBg 
         </div>
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} />
           {" Add Supplier"}
@@ -65,8 +65,8 @@ export function SupplierModal({ onClose, onSave, dark, cardBg, subText, inputBg 
     </Modal>
   );
 }
-export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, suppliers, setSuppliers }) {
-  const [query, setQuery] = useState("");
+export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, suppliers, setSuppliers, seed }) {
+  const [query, setQuery] = useState(seed || "");
   const [modalOpen, setModalOpen] = useState(false);
   const filtered = suppliers.filter((s) => s.name.toLowerCase().includes(query.toLowerCase()));
   const totalPurchased = suppliers.reduce((s, x) => s + x.purchased, 0);
@@ -86,7 +86,7 @@ export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Suppliers</h1>
+          <h2 className="text-xl font-bold">Suppliers</h2>
           <p className={`text-sm ${subText}`}>
             {suppliers.length}
             {" supplier relationships"}
@@ -94,7 +94,7 @@ export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary"
         >
           <Plus size={16} />
           {" Add Supplier"}
@@ -116,15 +116,7 @@ export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5">
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border w-full sm:w-72 ${inputBg}`}>
-            <Search size={15} className={subText} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search supplier..."
-              className="bg-transparent outline-none text-sm w-full"
-            />
-          </div>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search supplier..." inputBg={inputBg} subText={subText} className="w-full sm:w-72" />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[860px]">
@@ -159,8 +151,8 @@ export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
                     </p>
                   </td>
                   <td className={`py-3 px-2 ${subText}`}>{s.category}</td>
-                  <td className="py-3 px-2 font-medium">{money(s.purchased)}</td>
-                  <td className={`py-3 px-2 ${subText}`}>{fmtDate(s.lastOrder)}</td>
+                  <td className="py-3 px-2 font-medium whitespace-nowrap">{money(s.purchased)}</td>
+                  <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{fmtDate(s.lastOrder)}</td>
                   <td className="py-3 px-2">
                     <Badge tone={s.status === "Active" ? "green" : "amber"}>{s.status}</Badge>
                   </td>
@@ -169,6 +161,8 @@ export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
                       <button
                         onClick={() => deleteSupplier(s)}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -178,8 +172,8 @@ export function Suppliers({ dark, cardBg, subText, inputBg, hoverRow, setToast, 
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className={`text-center py-10 text-sm ${subText}`}>
-                    No suppliers match this search.
+                  <td colSpan={7} className="py-2">
+                    <EmptyState compact subText={subText} title="No suppliers match this search." />
                   </td>
                 </tr>
               )}

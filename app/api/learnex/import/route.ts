@@ -1,5 +1,5 @@
 import { importAll, isInitialized } from "@/lib/server/learnex/repository";
-import { readJson, respond } from "@/lib/server/learnex/http";
+import { BODY_LIMITS, readJson, respond } from "@/lib/server/learnex/http";
 import { actorOf, requirePermission, requireSameOrigin, requireUser } from "@/lib/server/auth/dal";
 import { ConflictError } from "@/lib/server/errors";
 
@@ -14,6 +14,6 @@ export async function POST(request: Request) {
         "The database is already set up. Use Settings → Data & Backup → Restore instead.",
       );
     }
-    await importAll((await readJson(request)).stores, actorOf(user));
+    await importAll((await readJson(request, BODY_LIMITS.import)).stores, actorOf(user));
   });
 }

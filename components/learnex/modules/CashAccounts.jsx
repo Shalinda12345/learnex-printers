@@ -12,7 +12,7 @@ import {
   Trash2,
   Wallet,
 } from "@/components/learnex/icons";
-import { Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
+import { Badge, EmptyState, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   CASH_ACCOUNT_TYPES,
   NON_PNL_LABEL,
@@ -160,7 +160,7 @@ export function CashMoveModal({
         <button
           type="submit"
           disabled={mode === "transfer" && fromAcc === toAcc}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors disabled:opacity-40"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} />
           {" Record"}
@@ -226,7 +226,7 @@ export function CashAccountModal({ initial, onClose, onSave, dark, cardBg, subTe
         </Field>
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} />
           {initial ? " Save Changes" : " Create Account"}
@@ -410,7 +410,7 @@ export function CashAccounts({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">{"Cash & Bank Accounts"}</h1>
+          <h2 className="text-xl font-bold">{"Cash & Bank Accounts"}</h2>
           <p className={`text-sm ${subText}`}>
             Every rupee that moves, and which account it moved through. Purchases of stock and raw materials
             are paid from cash like anything else, and still never touch profit.
@@ -419,21 +419,21 @@ export function CashAccounts({
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setMoveMode("transfer")}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+            className="btn btn-primary"
           >
             <Route size={15} />
             {" Transfer"}
           </button>
           <button
             onClick={() => setMoveMode("in")}
-            className={`flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-xl border transition-colors ${dark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
+            className="btn btn-secondary"
           >
             <ArrowDownRight size={15} />
             {" Money In"}
           </button>
           <button
             onClick={() => setMoveMode("out")}
-            className={`flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-xl border transition-colors ${dark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
+            className="btn btn-secondary"
           >
             <ArrowUpRight size={15} />
             {" Money Out"}
@@ -443,7 +443,7 @@ export function CashAccounts({
               setEditing(null);
               setAccModal(true);
             }}
-            className={`flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-xl border transition-colors ${dark ? "border-slate-700 text-slate-200 hover:bg-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
+            className="btn btn-secondary"
           >
             <Plus size={15} />
             {" Account"}
@@ -499,7 +499,7 @@ export function CashAccounts({
                     <button
                       key={a.id}
                       onClick={() => topUpAccount(a)}
-                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3.5 py-2 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+                      className="btn btn-primary btn-sm"
                     >
                       <Route size={13} />
                       {` Top up ${a.name} with ${money(round2(-a.balance))}`}
@@ -543,10 +543,10 @@ export function CashAccounts({
                     {a.notes && <p className={`text-xs ${subText} max-w-[180px] line-clamp-2`}>{a.notes}</p>}
                   </td>
                   <td className={`py-3 px-2 ${subText}`}>{a.type}</td>
-                  <td className={`py-3 px-2 ${subText}`}>{money(numVal(a.opening, 0))}</td>
-                  <td className="py-3 px-2 text-emerald-600">{money(a.inn)}</td>
-                  <td className="py-3 px-2 text-red-600">{money(a.out)}</td>
-                  <td className={`py-3 px-2 font-bold ${a.balance >= 0 ? "" : "text-red-600"}`}>
+                  <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{money(numVal(a.opening, 0))}</td>
+                  <td className="py-3 px-2 text-emerald-600 whitespace-nowrap">{money(a.inn)}</td>
+                  <td className="py-3 px-2 text-red-600 whitespace-nowrap">{money(a.out)}</td>
+                  <td className={`py-3 px-2 font-bold ${a.balance >= 0 ? "" : "text-red-600"} whitespace-nowrap`}>
                     {money(a.balance)}
                   </td>
                   <td className="py-3 px-5">
@@ -558,12 +558,16 @@ export function CashAccounts({
                           setAccModal(true);
                         }}
                         className={`w-7 h-7 rounded-lg flex items-center justify-center ${dark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}
+                        title="Edit"
+                        aria-label="Edit"
                       >
                         <Pencil size={13} />
                       </button>
                       <button
                         onClick={() => deleteAccount(a)}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -582,7 +586,7 @@ export function CashAccounts({
             {" Cash Book"}
           </h3>
           <div className="flex items-center gap-2 flex-wrap">
-            <select
+            <select aria-label="Filter by account"
               value={accFilter}
               onChange={(e) => setAccFilter(e.target.value)}
               className={`text-xs px-3 py-1.5 rounded-xl border ${inputBg}`}
@@ -594,7 +598,7 @@ export function CashAccounts({
                 </option>
               ))}
             </select>
-            <select
+            <select aria-label="Filter by kind"
               value={kindFilter}
               onChange={(e) => setKindFilter(e.target.value)}
               className={`text-xs px-3 py-1.5 rounded-xl border ${inputBg}`}
@@ -603,13 +607,13 @@ export function CashAccounts({
                 <option key={k}>{k}</option>
               ))}
             </select>
-            <input
+            <input aria-label="From date"
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               className={`text-xs px-3 py-1.5 rounded-xl border ${inputBg}`}
             />
-            <input
+            <input aria-label="To date"
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -658,7 +662,7 @@ export function CashAccounts({
                     key={t.id}
                     className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors`}
                   >
-                    <td className={`py-3 px-5 ${subText}`}>{fmtDate(t.date)}</td>
+                    <td className={`py-3 px-5 ${subText} whitespace-nowrap`}>{fmtDate(t.date)}</td>
                     <td className="py-3 px-2">
                       <p className="font-medium">{t.desc}</p>
                       <p className={`text-xs ${subText}`}>{t.category}</p>
@@ -680,8 +684,8 @@ export function CashAccounts({
               })}
               {book.length === 0 && (
                 <tr>
-                  <td colSpan={6} className={`text-center py-10 text-sm ${subText}`}>
-                    No cash movements match these filters yet.
+                  <td colSpan={6} className="py-2">
+                    <EmptyState compact subText={subText} title="No cash movements match these filters yet." />
                   </td>
                 </tr>
               )}

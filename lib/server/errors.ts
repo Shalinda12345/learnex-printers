@@ -6,6 +6,8 @@ export class HttpError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /** Extra response headers (e.g. Retry-After). */
+    public headers?: Record<string, string>,
   ) {
     super(message);
   }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Badge, Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
+import { Badge, EmptyState, Field, Modal, SearchInput, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   Building2,
   CheckCircle2,
@@ -7,7 +7,6 @@ import {
   Plus,
   Route,
   Save,
-  Search,
   Trash2,
 } from "@/components/learnex/icons";
 import { MAIN_CASH_ID, nextTxnId } from "@/lib/learnex/accounting";
@@ -84,7 +83,7 @@ export function DeliveryRunModal({ onClose, onSave, dark, cardBg, subText, input
               const p = products.find((x) => x.id === Number(it.productId));
               return (
                 <div key={i} className="flex items-center gap-2">
-                  <select
+                  <select aria-label="Product to take out"
                     value={it.productId}
                     onChange={(e) => updateItem(i, { productId: e.target.value })}
                     className={`${inputCls(inputBg)} flex-1`}
@@ -98,7 +97,7 @@ export function DeliveryRunModal({ onClose, onSave, dark, cardBg, subText, input
                       </option>
                     ))}
                   </select>
-                  <input
+                  <input aria-label="Quantity taken"
                     type="number"
                     min="1"
                     max={p ? p.stock : undefined}
@@ -111,6 +110,8 @@ export function DeliveryRunModal({ onClose, onSave, dark, cardBg, subText, input
                     type="button"
                     onClick={() => removeRow(i)}
                     className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 shrink-0"
+                    title="Delete"
+                    aria-label="Delete"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -142,7 +143,7 @@ export function DeliveryRunModal({ onClose, onSave, dark, cardBg, subText, input
         <button
           type="submit"
           disabled={available.length === 0}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors disabled:opacity-40"
+          className="btn btn-primary btn-block"
         >
           <Route size={15} />
           {" Start Delivery Run"}
@@ -370,7 +371,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                     const pr = Math.max(0, round2(ln.price));
                     return (
                       <div key={j} className="flex items-center gap-2">
-                        <input
+                        <input aria-label="Quantity sold"
                           type="number"
                           min="0"
                           max={li.taken}
@@ -380,7 +381,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                           placeholder="0"
                         />
                         <span className={`w-8 text-center text-xs ${subText}`}>@</span>
-                        <input
+                        <input aria-label="Price each"
                           type="number"
                           min="0"
                           step="0.01"
@@ -395,6 +396,8 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                           onClick={() => removeLine(i, j)}
                           disabled={(priceLines[i] || []).length <= 1}
                           className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 shrink-0 disabled:opacity-30"
+                          title="Delete"
+                          aria-label="Delete"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -496,7 +499,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                   <div className="space-y-2 mt-1">
                     {creditBills[bi].items.map((it, ii) => (
                       <div key={ii} className="flex items-center gap-2">
-                        <select
+                        <select aria-label="Goods on the credit bill"
                           value={it.productId}
                           onChange={(e) => onBillProductChange(bi, ii, e.target.value)}
                           className={`${inputCls(inputBg)} flex-1 min-w-0`}
@@ -508,7 +511,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                             </option>
                           ))}
                         </select>
-                        <input
+                        <input aria-label="Quantity"
                           type="number"
                           min="0"
                           step="any"
@@ -517,7 +520,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                           className={`${inputCls(inputBg)} w-20`}
                           placeholder="0"
                         />
-                        <input
+                        <input aria-label="Price each"
                           type="number"
                           min="0"
                           step="0.01"
@@ -534,6 +537,8 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
                           onClick={() => removeBillItem(bi, ii)}
                           disabled={creditBills[bi].items.length <= 1}
                           className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 shrink-0 disabled:opacity-30"
+                          title="Delete"
+                          aria-label="Delete"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -667,7 +672,7 @@ export function CompleteDeliveryModal({ run, onClose, onSave, dark, cardBg, subT
         <button
           type="submit"
           disabled={anyOver || creditInvalid}
-          className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-emerald-900/20 transition-colors disabled:opacity-40"
+          className="btn btn-success btn-block"
         >
           <CheckCircle2 size={15} />
           {creditTotal > 0
@@ -1005,7 +1010,7 @@ export function DeliveryStock({
         </Field>
         <button
           onClick={saveDateEdit}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} />
           {" Save Correct Date"}
@@ -1018,7 +1023,7 @@ export function DeliveryStock({
       {editDateModal}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Delivery Stock</h1>
+          <h2 className="text-xl font-bold">Delivery Stock</h2>
           <p className={`text-sm ${subText}`}>
             Record the stock taken out for delivery, then close the run with what came back to update stock,
             sales and profit automatically
@@ -1027,7 +1032,7 @@ export function DeliveryStock({
         <button
           onClick={() => setModalOpen(true)}
           disabled={products.filter((p) => p.stock > 0).length === 0}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors disabled:opacity-40"
+          className="btn btn-primary"
         >
           <Plus size={16} />
           {" New Delivery Run"}
@@ -1061,15 +1066,7 @@ export function DeliveryStock({
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5">
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border w-full sm:w-72 ${inputBg}`}>
-            <Search size={15} className={subText} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search run #..."
-              className="bg-transparent outline-none text-sm w-full"
-            />
-          </div>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search run #..." inputBg={inputBg} subText={subText} className="w-full sm:w-72" />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[780px]">
@@ -1096,8 +1093,8 @@ export function DeliveryStock({
                   className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
                   onClick={() => (r.status === "Ongoing" ? setClosingRun(r) : setSelected(r))}
                 >
-                  <td className="py-3 px-5 font-medium">{r.id}</td>
-                  <td className={`py-3 px-2 ${subText}`}>{fmtDate(r.date)}</td>
+                  <td className="py-3 px-5 font-medium whitespace-nowrap">{r.id}</td>
+                  <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{fmtDate(r.date)}</td>
                   <td className={`py-3 px-2 ${subText}`}>{r.lineItems.length}</td>
                   <td className="py-3 px-2">{r.totalTaken}</td>
                   <td className="py-3 px-2">{r.soldQty === null ? "—" : r.soldQty}</td>
@@ -1127,7 +1124,7 @@ export function DeliveryStock({
                             e.stopPropagation();
                             setClosingRun(r);
                           }}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white"
+                          className="btn btn-success btn-sm"
                         >
                           Close Run
                         </button>
@@ -1150,6 +1147,8 @@ export function DeliveryStock({
                           deleteRun(r);
                         }}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -1159,8 +1158,10 @@ export function DeliveryStock({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
-                    No delivery runs yet. Start one to record the stock taken out for today&apos;s delivery.
+                  <td colSpan={10} className="py-2">
+                    <EmptyState compact subText={subText} title="No delivery runs yet.">
+                      Start one to record the stock taken out for today&apos;s delivery.
+                    </EmptyState>
                   </td>
                 </tr>
               )}

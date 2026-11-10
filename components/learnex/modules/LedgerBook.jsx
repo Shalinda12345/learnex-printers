@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { AttachmentLink, Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
+import { AttachmentLink, Badge, EmptyState, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
@@ -194,7 +194,7 @@ export function LedgerBook({
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary"
         >
           <Plus size={16} />
           {" New Entry"}
@@ -262,7 +262,7 @@ export function LedgerBook({
               <ReceiptText size={16} className={subText} />
               {" Ledger Entries"}
             </h3>
-            <select
+            <select aria-label="Filter by type"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
               className={`text-xs px-3 py-1.5 rounded-xl border ${inputBg}`}
@@ -284,7 +284,7 @@ export function LedgerBook({
                   <th className="font-medium py-2 px-2">Date</th>
                   <th className="font-medium py-2 px-2">Amount</th>
                   <th className="font-medium py-2 px-2">Slip</th>
-                  <th className="font-medium py-2 px-5" />
+                  <th className="font-medium py-2 px-5"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -300,7 +300,7 @@ export function LedgerBook({
                         {isPnlTxn(t) ? "Profit or Loss" : "Balance sheet"}
                       </Badge>
                     </td>
-                    <td className={`py-3 px-2 ${subText}`}>{fmtDate(t.date)}</td>
+                    <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{fmtDate(t.date)}</td>
                     <td
                       className={`py-3 px-2 font-medium ${t.type === "Income" ? "text-emerald-600" : "text-red-600"}`}
                     >
@@ -314,6 +314,8 @@ export function LedgerBook({
                       <button
                         onClick={() => deleteEntry(t)}
                         className="w-7 h-7 rounded-lg inline-flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -322,9 +324,9 @@ export function LedgerBook({
                 ))}
                 {sorted.length === 0 && (
                   <tr>
-                    <td colSpan={7} className={`text-center py-8 text-sm ${subText}`}>
-                      No ledger entries yet.
-                    </td>
+                    <td colSpan={7} className="py-2">
+                    <EmptyState compact subText={subText} title="No ledger entries yet." />
+                  </td>
                   </tr>
                 )}
               </tbody>

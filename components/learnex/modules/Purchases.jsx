@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AttachmentLink, Badge, Field, FileUpload, Modal, StatCard, inputCls } from "@/components/learnex/ui";
+import { AttachmentLink, Badge, EmptyState, Field, FileUpload, Modal, SearchInput, StatCard, inputCls } from "@/components/learnex/ui";
 import {
   MAIN_CASH_ID,
   cashAccountBalance,
@@ -11,7 +11,7 @@ import {
   txnKind,
   withDefaultAccounts,
 } from "@/lib/learnex/accounting";
-import { Plus, Save, Search, Trash2, Wallet } from "@/components/learnex/icons";
+import { Plus, Save, Trash2, Wallet } from "@/components/learnex/icons";
 import {
   fmtDate,
   money,
@@ -136,7 +136,7 @@ export function PurchaseOrderModal({
             <div className="space-y-2">
               {items.map((it, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <select
+                  <select aria-label="Raw material"
                     value={it.materialId}
                     onChange={(e) => onMaterialChange(i, e.target.value)}
                     className={`${inputCls(inputBg)} flex-1`}
@@ -147,7 +147,7 @@ export function PurchaseOrderModal({
                       </option>
                     ))}
                   </select>
-                  <input
+                  <input aria-label="Quantity"
                     type="number"
                     min="1"
                     value={it.qty}
@@ -155,7 +155,7 @@ export function PurchaseOrderModal({
                     className={`${inputCls(inputBg)} w-16`}
                     placeholder="Qty"
                   />
-                  <input
+                  <input aria-label="Unit cost"
                     type="number"
                     min="0"
                     step="0.01"
@@ -169,6 +169,8 @@ export function PurchaseOrderModal({
                     type="button"
                     onClick={() => removeRow(i)}
                     className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-50 shrink-0"
+                    title="Delete"
+                    aria-label="Delete"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -245,7 +247,7 @@ export function PurchaseOrderModal({
                   a negative balance. The transfer is recorded in the cash book and does not affect profit.
                 </p>
                 {autoTopUp && (
-                  <select
+                  <select aria-label="Top up from account"
                     value={topUpFrom}
                     onChange={(e) => setTopUpFrom(e.target.value)}
                     className={`${inputCls(inputBg)} mt-2`}
@@ -285,7 +287,7 @@ export function PurchaseOrderModal({
         </div>
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} />
           {" Save Purchase Order"}
@@ -310,8 +312,9 @@ export function Purchases({
   ledger,
   setLedger,
   cashAccounts,
+  seed,
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(seed || "");
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const filtered = purchaseOrders.filter(
@@ -539,7 +542,7 @@ export function Purchases({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Purchases</h1>
+          <h2 className="text-xl font-bold">Purchases</h2>
           <p className={`text-sm ${subText}`}>
             Paid in cash, added to raw material stock, and kept out of the Profit or Loss statement
           </p>
@@ -547,7 +550,7 @@ export function Purchases({
         <button
           onClick={() => setModalOpen(true)}
           disabled={suppliers.length === 0}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors disabled:opacity-40"
+          className="btn btn-primary"
         >
           <Plus size={16} />
           {" New Purchase Order"}
@@ -581,15 +584,7 @@ export function Purchases({
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5">
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border w-full sm:w-72 ${inputBg}`}>
-            <Search size={15} className={subText} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search PO # or supplier..."
-              className="bg-transparent outline-none text-sm w-full"
-            />
-          </div>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search PO # or supplier..." inputBg={inputBg} subText={subText} className="w-full sm:w-72" />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[700px]">
@@ -614,10 +609,10 @@ export function Purchases({
                   className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors cursor-pointer`}
                   onClick={() => setSelected(o)}
                 >
-                  <td className="py-3 px-5 font-medium">{o.id}</td>
+                  <td className="py-3 px-5 font-medium whitespace-nowrap">{o.id}</td>
                   <td className="py-3 px-2">{o.supplier}</td>
                   <td className={`py-3 px-2 ${subText}`}>{o.items}</td>
-                  <td className="py-3 px-2 font-medium">{money(o.total)}</td>
+                  <td className="py-3 px-2 font-medium whitespace-nowrap">{money(o.total)}</td>
                   <td className="py-3 px-2">
                     {poIsUnpaid(o) ? (
                       <Badge tone="amber">Unpaid</Badge>
@@ -625,7 +620,7 @@ export function Purchases({
                       <span className={`text-xs ${subText}`}>{accName(o.cashAccount || MAIN_CASH_ID)}</span>
                     )}
                   </td>
-                  <td className={`py-3 px-2 ${subText}`}>{fmtDate(o.date)}</td>
+                  <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{fmtDate(o.date)}</td>
                   <td className="py-3 px-5">
                     <AttachmentLink attachment={o.attachment} subText={subText} />
                   </td>
@@ -637,6 +632,8 @@ export function Purchases({
                           deletePurchase(o);
                         }}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -646,9 +643,10 @@ export function Purchases({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className={`text-center py-10 text-sm ${subText}`}>
-                    No purchase orders yet. Create one to log a supplier purchase and add stock to Raw
-                    Materials.
+                  <td colSpan={8} className="py-2">
+                    <EmptyState compact subText={subText} title="No purchase orders yet.">
+                      Create one to log a supplier purchase and add stock to Raw Materials.
+                    </EmptyState>
                   </td>
                 </tr>
               )}
@@ -731,7 +729,7 @@ export function Purchases({
               {poIsUnpaid(selected) && (
                 <button
                   onClick={() => settlePurchase(selected)}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-emerald-900/20 transition-colors"
+                  className="btn btn-success btn-block"
                 >
                   <Wallet size={15} />
                   {` Pay ${money(round2(numVal(selected.total, 0) - numVal(selected.amountPaid, 0)))} to Supplier`}
