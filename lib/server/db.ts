@@ -25,11 +25,23 @@ function warnIfAdministrator() {
   } catch {}
 }
 
+// Connections per server process. On a serverless host (Vercel) every running instance
+// has its own pool, so a small hosted database can run out of connections: lower this
+// there (DATABASE_POOL_SIZE=3, say). Default 10, as before.
+function poolSize() {
+  const n = Number(process.env.DATABASE_POOL_SIZE);
+  return Number.isInteger(n) && n >= 1 && n <= 50 ? n : 10;
+}
+
 function createPool() {
   warnIfAdministrator();
   const pool = mysql.createPool({
     uri: process.env.DATABASE_URL,
-    connectionLimit: 10,
+    connectionLimit: poolSize(),
+    // DATABASE_SSL=1: encrypt the connection and check the server's certificate. For a database
+    // reached over the internet (the app on Vercel, MySQL at alwaysdata). Off unless asked for,
+    // because a local server (XAMPP) has no certificate.
+    ...(process.env.DATABASE_SSL === "1" ? { ssl: { rejectUnauthorized: true } } : {}),
     timezone: "Z",
     // DATE columns come back as the plain "YYYY-MM-DD" text the app uses
     // everywhere, instead of a JS Date (which would shift with the timezone).

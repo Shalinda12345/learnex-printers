@@ -47,6 +47,13 @@ export function SaveStatusBadge() {
     title =
       (error || "You don't have permission to make that change.") +
       "\n\nReload the page to see what is saved.";
+  } else if (status === "conflict") {
+    label = "Out of date";
+    dot = "bg-red-500";
+    text = "text-red-600 dark:text-red-400";
+    title =
+      (error || "Someone else changed the same data.") +
+      "\n\nReload the page to get the latest data. Your last change was not saved.";
   } else if (status === "error") {
     label = "Not saved";
     dot = "bg-red-500";

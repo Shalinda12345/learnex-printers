@@ -5,7 +5,7 @@ import { chromium } from "playwright-core";
 
 export const BASE = process.env.TEST_BASE_URL;
 export const DEAD_DB_BASE = process.env.TEST_DEAD_DB_BASE_URL;
-// A server with the sign-in rate limit switched on (10 per client, 40 in all, per minute).
+// A server with the sign-in rate limit switched on (10 per client per minute).
 export const THROTTLED_BASE = process.env.TEST_THROTTLED_BASE_URL;
 export const DATABASE_URL = process.env.TEST_DATABASE_URL;
 export const SETUP_CODE = process.env.TEST_SETUP_CODE;
@@ -243,7 +243,7 @@ export const nav = (page, label) => page.locator("aside nav button", { hasText: 
 export const badge = (page) =>
   page
     .locator("header [title]")
-    .filter({ hasText: /^(Saved|Saving…|Not saved|Not allowed)$/ })
+    .filter({ hasText: /^(Saved|Saving…|Not saved|Not allowed|Out of date)$/ })
     .first();
 
 /** Waits until the top-bar badge says "Saved" (all changes written to the database). */

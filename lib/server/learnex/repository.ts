@@ -1,6 +1,6 @@
 import "server-only";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { pool, withTransaction } from "@/lib/server/db";
+import { pool, withTransaction, type Db } from "@/lib/server/db";
 import {
   STORES,
   STORE_BY_KEY,
@@ -12,7 +12,7 @@ import {
   type ReplaceStore,
   type SingleStore,
 } from "@/lib/server/learnex/stores";
-import { BadRequestError, ForbiddenError } from "@/lib/server/errors";
+import { BadRequestError, ConflictError, ForbiddenError } from "@/lib/server/errors";
 import { audit, type Actor } from "@/lib/server/audit";
 import { STORE_LABELS, type StoreAccess, type StoreKey } from "@/lib/auth/permissions";
 import { sanityProblem } from "@/lib/server/learnex/sanity";
@@ -44,6 +44,16 @@ export interface StoreChange {
   order?: unknown[];
   /** list modules: the client has never saved this module — replace it entirely */
   replace?: boolean;
+  /**
+   * list modules, optimistic locking: for each record in `upserts` that the client
+   * loaded from the database, the version it loaded (see `versions` in loadAll).
+   * If the stored record has changed since, the save is refused (409 `conflict`)
+   * instead of silently overwriting someone else's work. Optional: a client that
+   * sends neither `base` nor `creates` (older browser tabs) is not checked.
+   */
+  base?: Record<string, string>;
+  /** list modules: ids of records the client believes are new; refused if one already exists */
+  creates?: unknown[];
   /** settings / users: the whole new value */
   value?: unknown;
 }
@@ -382,6 +392,67 @@ async function describeChanges(conn: PoolConnection, def: ListStore, upserts: Re
   return { ...(edits.length ? { edits } : {}), ...(removed.length ? { removed } : {}) };
 }
 
+/* ------------------------------------------------------------------ */
+/* record versions (optimistic locking)                                 */
+/* ------------------------------------------------------------------ */
+
+// A record's version is its `updated_at` to the microsecond, as text. Every list
+// table has that column and sets it on each write, so no schema change is needed.
+// (Re-ordering the list changes `position` only, not the version.)
+const VERSION_SQL = "DATE_FORMAT(`updated_at`, '%Y-%m-%d %H:%i:%s.%f')";
+export type Versions = Record<string, string>;
+
+/** Versions of the given records (`lock`: hold them until the transaction ends). */
+async function readVersions(db: Db, def: ListStore, ids: (string | number)[], lock = false) {
+  const out: Versions = {};
+  for (const batch of chunks(ids, BATCH_IDS)) {
+    const [rows] = await db.query<RowDataPacket[]>(
+      `SELECT \`id\`, ${VERSION_SQL} AS v FROM ${q(def.table)} WHERE \`id\` IN (?)${lock ? " FOR UPDATE" : ""}`,
+      [batch],
+    );
+    for (const r of rows) out[String(r.id)] = r.v;
+  }
+  return out;
+}
+
+// Refuses the save when it would overwrite a record somebody else created or changed
+// since this client loaded it. Runs inside the save's transaction with the rows locked,
+// so two saves of the same record take turns and the second one sees the first.
+async function checkVersions(
+  conn: PoolConnection,
+  def: ListStore,
+  label: string,
+  upsertIds: (string | number)[],
+  change: StoreChange,
+) {
+  const { base, creates } = change;
+  if (base === undefined && creates === undefined) return; // older client: no checking
+  if (base !== undefined && (!isPlainObject(base) || !Object.values(base).every((v) => typeof v === "string")))
+    throw new BadRequestError(`${def.key}: base must map record ids to version texts`);
+  if (creates !== undefined && !Array.isArray(creates))
+    throw new BadRequestError(`${def.key}: creates must be a list of ids`);
+  const created = new Set((creates ?? []).map((id) => String(checkId(def, id))));
+  const known = (base ?? {}) as Versions;
+  const current = await readVersions(conn, def, upsertIds, true);
+  const clashes: string[] = [];
+  for (const id of upsertIds.map(String)) {
+    const now = current[id];
+    if (created.has(id)) {
+      if (now !== undefined) clashes.push(`${id} was just created by someone else`);
+    } else if (Object.hasOwn(known, id)) {
+      if (now === undefined) clashes.push(`${id} was deleted by someone else`);
+      else if (now !== known[id]) clashes.push(`${id} was changed by someone else`);
+    }
+  }
+  if (clashes.length) {
+    const shown = clashes.slice(0, 3).join("; ") + (clashes.length > 3 ? `; and ${clashes.length - 3} more` : "");
+    throw new ConflictError(
+      `${label}: ${shown}. Reload the page to get the latest data. Nothing was saved.`,
+      "conflict",
+    );
+  }
+}
+
 /**
  * `wholeModules`: may this user replace or empty the module in one go? Without
  * it, `replace` is only the very first save of a module nobody has saved yet,
@@ -389,7 +460,14 @@ async function describeChanges(conn: PoolConnection, def: ListStore, upserts: Re
  * is saved must pass the sanity checks (lib/server/learnex/sanity.ts). The same
  * permission means "trusted to write any data, as a backup restore does".
  */
-async function syncList(conn: PoolConnection, def: ListStore, change: StoreChange, wholeModules: boolean) {
+async function syncList(
+  conn: PoolConnection,
+  def: ListStore,
+  change: StoreChange,
+  wholeModules: boolean,
+  /** receives the new version of every record this change wrote */
+  versionsOut?: Record<string, Versions>,
+) {
   const upserts = change.upserts ?? [];
   const deletes = change.deletes ?? [];
   if (!Array.isArray(upserts) || !upserts.every(isPlainObject))
@@ -436,6 +514,9 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
     }
   }
 
+  // Somebody else changed or created one of these records since this client loaded it?
+  if (!change.replace) await checkVersions(conn, def, label, upsertIds, change);
+
   // What the records held before this save (the activity log keeps it).
   const detail = change.replace ? {} : await describeChanges(conn, def, upserts, deleteIds);
 
@@ -466,6 +547,7 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
   await writeListRecords(conn, def, upserts, position);
   if (order.length && !change.replace) await updatePositions(conn, def, order);
   await markInitialized(conn, def.key);
+  if (versionsOut && upsertIds.length) versionsOut[def.key] = await readVersions(conn, def, upsertIds);
   const summary: ChangeSummary = {
     store: def.key,
     created: upsertIds.length - existing,
@@ -499,6 +581,13 @@ async function loadList(def: ListStore) {
     }
   }
   return rows.map((r) => joinRecord(r, def.fields, childrenById.get(fromDb(def.idType, r.id)) || new Map()));
+}
+
+async function loadVersions(def: ListStore) {
+  const out: Versions = {};
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT \`id\`, ${VERSION_SQL} AS v FROM ${q(def.table)}`);
+  for (const r of rows) out[String(r.id)] = r.v;
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -539,11 +628,12 @@ async function applyChange(
   conn: PoolConnection,
   change: StoreChange,
   wholeModules: boolean,
+  versionsOut: Record<string, Versions>,
 ): Promise<ChangeSummary> {
   if (!isPlainObject(change)) throw new BadRequestError("each change must be an object");
   const def = STORE_BY_KEY.get(change.store);
   if (!def) throw new BadRequestError(`unknown module ${JSON.stringify(change.store)}`);
-  if (def.kind === "list") return syncList(conn, def, change, wholeModules);
+  if (def.kind === "list") return syncList(conn, def, change, wholeModules, versionsOut);
   if (def.kind === "single") return syncSingle(conn, def, change.value);
   return syncReplace(conn, def, change.value);
 }
@@ -560,9 +650,14 @@ export async function loadAll(access: AccessMap = ALL_ACCESS) {
   const [state] = await pool.query<RowDataPacket[]>(`SELECT store FROM store_state`);
   const saved = new Set(state.map((r) => r.store as string));
   const stores: Rec = {};
+  // Version of every record, so a save can tell whether someone else changed it meanwhile.
+  const versions: Record<string, Versions> = {};
   for (const def of STORES) {
     if (!saved.has(def.key) || !access[def.key as StoreKey]) continue;
-    if (def.kind === "list") stores[def.key] = await loadList(def);
+    if (def.kind === "list") {
+      stores[def.key] = await loadList(def);
+      versions[def.key] = await loadVersions(def);
+    }
     else if (def.kind === "single") {
       const [rows] = await pool.query<RowDataPacket[]>(`SELECT * FROM ${q(def.table)} WHERE \`id\` = 1`);
       if (rows.length) stores[def.key] = joinRecord(rows[0], def.fields, new Map());
@@ -573,7 +668,7 @@ export async function loadAll(access: AccessMap = ALL_ACCESS) {
       stores[def.key] = rows.map((r) => joinRecord(r, def.fields, new Map()));
     }
   }
-  return { initialized, stores, access };
+  return { initialized, stores, access, versions };
 }
 
 function checkWritable(access: AccessMap, store: unknown) {
@@ -601,10 +696,14 @@ export async function saveChanges(
   if (!Array.isArray(changes) || !changes.length)
     throw new BadRequestError("changes must be a non-empty list");
   for (const change of changes) checkWritable(access, isPlainObject(change) ? change.store : undefined);
-  await withTransaction(async (conn) => {
+  return withTransaction(async (conn) => {
     const summaries: ChangeSummary[] = [];
-    for (const change of changes) summaries.push(await applyChange(conn, change as StoreChange, wholeModules));
+    const versions: Record<string, Versions> = {};
+    for (const change of changes)
+      summaries.push(await applyChange(conn, change as StoreChange, wholeModules, versions));
     await audit(actor, "data.save", summaries.map((s) => s.store).join(", "), { changes: summaries }, conn);
+    // the new version of every record written, for the next save from this client
+    return { ok: true, versions };
   });
 }
 

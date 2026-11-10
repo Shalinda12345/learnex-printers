@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     requireSameOrigin(request);
     const user = await requireUser();
     const body = await readJson(request, BODY_LIMITS.data);
-    await saveChanges(body.changes, actorOf(user), storeAccessFor(user.permissions), {
+    return saveChanges(body.changes, actorOf(user), storeAccessFor(user.permissions), {
       wholeModules: WHOLE_MODULE_PERMISSIONS.some((p) => user.permissions.has(p)),
     });
   });

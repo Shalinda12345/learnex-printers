@@ -77,10 +77,9 @@ async function waitFor(url) {
 const servers = [
   startServer(PORT, TEST_DATABASE_URL),
   startServer(PORT + 1, deadUrl.toString()),
-  // real limits: 10 attempts per client and 40 in all, per minute
+  // real limit: 10 attempts per client per minute
   startServer(PORT + 2, TEST_DATABASE_URL, {
     AUTH_RATE_LIMIT: "10",
-    AUTH_RATE_LIMIT_GLOBAL: "40",
     AUTH_RATE_WINDOW_SECONDS: "60",
   }),
 ];
@@ -106,6 +105,7 @@ try {
     "09-admin",
     "10-statements",
     "11-security",
+    "12-concurrency",
     "04-limitations",
   ];
   const only = process.argv.slice(2);
