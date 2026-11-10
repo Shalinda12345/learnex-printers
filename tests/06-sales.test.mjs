@@ -8,6 +8,7 @@ import {
   captureDialogs,
   card,
   field,
+  inflateAttachments,
   launchBrowser,
   loadStores,
   log,
@@ -470,7 +471,7 @@ describe("Sales Orders", () => {
     const page = await openApp(browser, "Sales Orders");
     await newOrder(page, { items: [{ productId: 102, qty: 1 }], attach: PNG });
     await waitSaved(page);
-    const a = (await stores()).salesOrders[0].attachment;
+    const a = (await inflateAttachments(await stores())).salesOrders[0].attachment;
     log(`attachment: ${a.name}, ${a.type}, ${a.dataUrl.length} chars`);
     assert.deepEqual([a.name, a.type], ["slip.png", "image/png"]);
     assert.ok(a.dataUrl.startsWith("data:image/png;base64,"));
@@ -478,7 +479,7 @@ describe("Sales Orders", () => {
     await page.context().close();
   });
 
-  test("SO-11 a slip bigger than 4.5 MB is refused", async () => {
+  test("SO-11 a slip bigger than 2.5 MB is refused", async () => {
     const page = await openApp(browser, "Sales Orders");
     await page.getByRole("button", { name: "New Order" }).click();
     await field(modal(page), "Attach Invoice / Delivery Slip (optional)").setInputFiles({
@@ -486,7 +487,7 @@ describe("Sales Orders", () => {
       mimeType: "image/png",
       buffer: Buffer.alloc(5 * 1024 * 1024),
     });
-    await modal(page).getByText("File is too large — please choose a file under 4.5MB.").waitFor();
+    await modal(page).getByText("File is too large — please choose a file under 2.5MB.").waitFor();
     assert.equal(await modal(page).getByText("huge.png").count(), 0);
     await page.context().close();
   });

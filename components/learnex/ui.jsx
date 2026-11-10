@@ -16,6 +16,7 @@ import {
 } from "@/components/learnex/icons";
 import { PERIODS, daysInMonth, isSafeAttachmentUrl, isoFromYMD, round2, todayISO } from "@/lib/learnex/utils";
 import { getSaveStatus } from "@/lib/learnex/persistence";
+import { prepareAttachment } from "@/lib/learnex/image";
 
 /* =====================================================================
    SHARED UI KIT
@@ -396,17 +397,18 @@ export function Field({ label, subText, children, hint, error, required }) {
 export function FileUpload({ label, value, onChange, dark, subText }) {
   const inputRef = useRef(null);
   const [error, setError] = useState("");
-  function handleFile(e) {
+  async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 4.5 * 1024 * 1024) {
-      setError("File is too large — please choose a file under 4.5MB.");
-      return;
+    try {
+      // photos are shrunk first; see lib/learnex/image.js for why
+      const attachment = await prepareAttachment(file);
+      setError("");
+      onChange(attachment);
+    } catch (err) {
+      setError(err.message);
     }
-    setError("");
-    const reader = new FileReader();
-    reader.onload = () => onChange({ name: file.name, type: file.type, dataUrl: reader.result });
-    reader.readAsDataURL(file);
+    e.target.value = ""; // choosing the same file again must work after a refusal
   }
   return (
     <div>
@@ -444,13 +446,26 @@ export function FileUpload({ label, value, onChange, dark, subText }) {
   );
 }
 
-export function AttachmentLink({ attachment, subText }) {
+// `store` and `id` say which record the attachment belongs to: records come from the server
+// without their files (only a small stand-in with stored: true), and the file is downloaded
+// from /api/learnex/attachment when the link is clicked. A file attached a moment ago in this
+// session is still held in full and is linked directly.
+export const attachmentHref = (attachment, store, id) =>
+  attachment && attachment.stored
+    ? store && id != null
+      ? `/api/learnex/attachment?store=${encodeURIComponent(store)}&id=${encodeURIComponent(id)}`
+      : null
+    : attachment && isSafeAttachmentUrl(attachment.dataUrl)
+      ? attachment.dataUrl
+      : null;
+
+export function AttachmentLink({ attachment, subText, store, id }) {
   if (!attachment) return <span className={`text-xs ${subText}`}>{"—"}</span>;
-  if (!isSafeAttachmentUrl(attachment.dataUrl))
-    return <span className="text-xs text-red-500">Unsafe file (not shown)</span>;
+  const href = attachmentHref(attachment, store, id);
+  if (!href) return <span className="text-xs text-red-500">Unsafe file (not shown)</span>;
   return (
     <a
-      href={attachment.dataUrl}
+      href={href}
       download={attachment.name}
       target="_blank"
       rel="noreferrer"

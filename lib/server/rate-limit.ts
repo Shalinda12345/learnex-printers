@@ -7,19 +7,21 @@ import { HttpError } from "@/lib/server/errors";
 
    Every attempt costs the server ~0.3 s of CPU and 64 MiB of memory (the
    password hash), so one visitor sending hundreds a minute could make real
-   sign-ins crawl. This is a sliding window kept in memory (this app runs as
-   one server process): at most AUTH_RATE_LIMIT attempts per client in
-   AUTH_RATE_WINDOW_SECONDS; a limit shared by all visitors could be used up to lock real users out
-   (no limit is shared by everybody). Set the limit to 0 to switch it off.
+   sign-ins crawl. This is a sliding window kept in memory (per server
+   instance): at most AUTH_RATE_LIMIT attempts per client in
+   AUTH_RATE_WINDOW_SECONDS. Set the limit to 0 to switch it off.
 
    WHO IS THE CLIENT? The address comes from the X-Forwarded-For header. Next
    fills that header in from the connection only when the request has none, so
    when browsers reach the app directly a client that sends its own header can
-   pretend to be someone else: the per-client limit then only stops senders
-   that don't forge it, and the global limit is the backstop that forging cannot
-   get around. Behind a reverse proxy that sets the header (see the README)
-   the address is reliable; TRUST_PROXY_HOPS says how many proxies are in front
-   (default 1: the last address in the list is the one the proxy saw).
+   pretend to be someone else, and this limit then only stops senders that don't
+   forge it. (There is deliberately no limit shared by everybody, because one
+   visitor could use it up and lock everyone out; what bounds the cost of a flood
+   is the hashing queue in lib/server/auth/password.ts, and the real protection
+   of an account is its lock, which is kept in the database.) Behind a reverse
+   proxy or on a host that sets the header (Vercel, see the README) the address
+   is reliable; TRUST_PROXY_HOPS says how many proxies are in front (default 1:
+   the last address in the list is the one the proxy saw).
 ===================================================================== */
 
 const intSetting = (name: string, fallback: number) => {

@@ -5,6 +5,7 @@ import { resetAllData } from "@/lib/learnex/persistence";
 import { downloadBackup, restoreFromBackup } from "@/lib/learnex/backup";
 import { UsersAndRoles } from "@/components/learnex/modules/UsersAndRoles";
 import { ActivityLog } from "@/components/learnex/modules/ActivityLog";
+import { useReauth } from "@/components/learnex/ReauthDialog";
 
 /* =====================================================================
    SETTINGS
@@ -68,6 +69,8 @@ export function SettingsPage({
     { key: "activity", label: "Activity Log", allowed: auth.can("audit.view") },
   ].filter((t) => t.allowed);
   const [tab, setTab] = useState(() => (tabs[0] ? tabs[0].key : null));
+  // restoring, clearing and resetting need the password typed again (the server checks it too)
+  const { ask: confirmPassword, dialog: passwordDialog } = useReauth({ cardBg, dark, subText, inputBg });
   const [form, setForm] = useState(settings);
   function saveChanges() {
     setSettings(form);
@@ -109,13 +112,14 @@ export function SettingsPage({
     { key: "suppliers", label: "Suppliers", count: suppliers.length, action: () => setSuppliers([]) },
     { key: "ledger", label: "Accounting Ledger", count: ledger.length, action: () => setLedger([]) },
   ];
-  function clearModule(m) {
+  async function clearModule(m) {
     if (
       !window.confirm(
         `Delete all ${m.count} record(s) in "${m.label}"? Everything else in the system will be left untouched. This cannot be undone.`,
       )
     )
       return;
+    if (!(await confirmPassword(`delete all records in "${m.label}"`))) return;
     m.action();
     setToast(`${m.label} cleared — all other data was left untouched.`);
   }
@@ -339,15 +343,20 @@ export function SettingsPage({
               <input aria-label="Backup file to restore"
                 type="file"
                 accept=".html,.json"
-                onChange={(e) => {
-                  const file = e.target.files && e.target.files[0];
+                onChange={async (e) => {
+                  const input = e.target;
+                  const file = input.files && input.files[0];
                   if (!file) return;
                   if (
                     !window.confirm(
                       `Restore from "${file.name}"?\n\nThis will replace products, customers, suppliers, sales orders, purchase orders, raw materials, delivery runs, the ledger, cash accounts, settings and users with what's in this file. This cannot be undone.`,
                     )
                   ) {
-                    e.target.value = "";
+                    input.value = "";
+                    return;
+                  }
+                  if (!(await confirmPassword("restore this backup"))) {
+                    input.value = "";
                     return;
                   }
                   restoreFromBackup(
@@ -368,7 +377,7 @@ export function SettingsPage({
                     },
                     setToast,
                   );
-                  e.target.value = "";
+                  input.value = "";
                 }}
                 className={`block w-full text-sm rounded-xl border p-2 ${inputBg} file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3.5 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-blue-700 file:cursor-pointer`}
               />
@@ -418,11 +427,12 @@ export function SettingsPage({
                   the module-specific clearing above unless you really want to start over completely.
                 </p>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (
                       window.confirm(
                         "This will permanently delete ALL data in every module — products, raw materials, purchases, sales, deliveries, customers, suppliers, ledger, settings and users — and restore the original demo data. This cannot be undone. Continue?",
-                      )
+                      ) &&
+                      (await confirmPassword("reset everything"))
                     )
                       resetAllData();
                   }}
@@ -439,6 +449,7 @@ export function SettingsPage({
       {tab === "activity" && (
         <ActivityLog dark={dark} cardBg={cardBg} subText={subText} inputBg={inputBg} hoverRow={hoverRow} />
       )}
+      {passwordDialog}
     </div>
   );
 }

@@ -2,6 +2,9 @@
   "name": "hashil",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,12 +14,13 @@
     "db:backup": "node --env-file=.env scripts/db-backup.mjs backup",
     "db:restore": "node --env-file=.env scripts/db-backup.mjs restore",
     "db:verify": "node --env-file=.env scripts/db-backup.mjs verify",
+    "owner:recover": "node --env-file=.env scripts/owner-recover.mjs",
     "test:db": "next build && node --env-file=.env scripts/test-db.mjs",
     "test:unit": "node --import ./tests/unit/register.mjs --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"tests/unit/*.test.mjs\""
   },
   "dependencies": {
-    "mysql2": "^3.24.4",
-    "next": "16.4.5",
+    "mysql2": "^3.24.6",
+    "next": "16.4.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1"
@@ -27,9 +31,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.5",
+    "eslint-config-next": "16.4.6",
     "playwright-core": "^1.47.2",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.5"
+    }
   }
 }

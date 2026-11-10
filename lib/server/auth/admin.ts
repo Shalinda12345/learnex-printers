@@ -6,8 +6,9 @@ import { audit } from "@/lib/server/audit";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@/lib/server/errors";
 import { generateTemporaryPassword, hashPassword } from "@/lib/server/auth/password";
 import { revokeUserSessions, type AuthUser } from "@/lib/server/auth/session";
+import { mfaEnabledAmong, removeMfa } from "@/lib/server/auth/mfa";
 import { actorOf } from "@/lib/server/auth/dal";
-import { assertNoIdentityClash, uniqueViolation, validateProfile } from "@/lib/server/auth/accounts";
+import { assertNoIdentityClash, oneTimePasswordExpired, uniqueViolation, validateProfile } from "@/lib/server/auth/accounts";
 import { OWNER_ROLE_KEY, PERMISSION_KEYS, isPermission } from "@/lib/auth/permissions";
 
 /* =====================================================================
@@ -145,7 +146,7 @@ function parseRoleIds(value: unknown, roles: RoleRow[]) {
 
 export async function listUsers() {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT u.id, u.username, u.name, u.email, u.status, u.must_change_password, u.last_login_at, u.locked_until, u.created_at,
+    `SELECT u.id, u.username, u.name, u.email, u.status, u.must_change_password, u.password_changed_at, u.last_login_at, u.locked_until, u.created_at,
             (SELECT count(*) FROM auth_sessions s WHERE s.user_id = u.id AND s.expires_at > NOW(6) AND s.absolute_expires_at > NOW(6)) AS active_sessions
      FROM auth_users u ORDER BY u.status, lower(u.name)`,
   );
@@ -158,6 +159,7 @@ export async function listUsers() {
     const userId = Number(g.user_id);
     rolesOf.set(userId, [...(rolesOf.get(userId) ?? []), { id: Number(g.id), key: g.key, name: g.name }]);
   }
+  const usesMfa = await mfaEnabledAmong(rows.map((u) => Number(u.id)));
   return rows.map((u) => ({
     id: Number(u.id),
     username: u.username,
@@ -165,11 +167,13 @@ export async function listUsers() {
     email: u.email,
     status: u.status,
     mustChangePassword: u.must_change_password,
+    oneTimePasswordExpired: !!u.must_change_password && oneTimePasswordExpired(u.password_changed_at),
     lastLoginAt: u.last_login_at,
     lockedUntil: u.locked_until && u.locked_until > new Date() ? u.locked_until : null,
     createdAt: u.created_at,
     roles: rolesOf.get(Number(u.id)) ?? [],
     activeSessions: Number(u.active_sessions),
+    mfaEnabled: usesMfa.has(Number(u.id)),
   }));
 }
 
@@ -323,6 +327,17 @@ export async function signOutUser(actor: AuthUser, rawId: unknown) {
   const count = await revokeUserSessions(id, id === actor.id ? actor.sessionId : undefined);
   await audit(actorOf(actor), "user.sign_out", target.username, { sessions: count });
   return { sessions: count };
+}
+
+/** Switches off someone's two-step sign-in (lost phone): the same rules as resetting their password. */
+export async function resetUserMfa(actor: AuthUser, rawId: unknown) {
+  const id = parseId(rawId);
+  await withTransaction(async (conn) => {
+    const target = await targetUser(conn, id);
+    assertCanManage(actor, target, await loadRoles(conn));
+    await removeMfa(id, conn);
+    await audit(actorOf(actor), "user.mfa_reset", target.username, {}, conn);
+  });
 }
 
 /* ---------------------------------------------------------------- roles */

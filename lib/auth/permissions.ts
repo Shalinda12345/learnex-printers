@@ -211,6 +211,50 @@ const BY_KEY = new Map(PERMISSIONS.map((p) => [p.key, p]));
 export const isPermission = (key: string) => BY_KEY.has(key);
 
 /**
+ * Write access to a module is by module, but several screens write to modules that belong to
+ * somebody else's job: a sale lowers a product's stock and raises a customer's total, a purchase
+ * adds to a supplier's total and a raw material's quantity. Those roles must not be able to do
+ * more than that, or a cashier could change prices by calling the API directly.
+ *
+ * For each module below, someone who holds none of the `full` permissions may only:
+ *   - add records (`create`) and remove records (`remove`), if the flags say so, and
+ *   - change the listed `fields` of records that already exist; every other field must stay as it is.
+ * (Restore and factory reset count as full control.) What each field list holds was taken from
+ * what the screens of the other roles really change.
+ */
+export interface LimitedWrite {
+  full: readonly string[];
+  create: boolean;
+  remove: boolean;
+  fields: readonly string[];
+}
+export const LIMITED_WRITES: Partial<Record<StoreKey, LimitedWrite>> = {
+  products: { full: ["inventory.manage"], create: false, remove: false, fields: ["stock"] },
+  customers: { full: ["customers.manage"], create: false, remove: false, fields: ["orders", "spent", "outstanding"] },
+  suppliers: { full: ["suppliers.manage"], create: false, remove: false, fields: ["purchased", "lastOrder"] },
+  rawMaterials: {
+    full: ["rawMaterials.manage"],
+    create: false,
+    remove: false,
+    fields: ["purchaseQty", "availableQty", "costPrice", "lastPurchaseCost"],
+  },
+  // Sales, purchases, deliveries and material usage add ledger lines and take their own back when an
+  // order is cancelled; only the books themselves (accounting, cash) may edit a line's figures.
+  ledger: { full: ["accounting.manage", "cash.manage"], create: true, remove: true, fields: ["date"] },
+};
+
+/** The modules these permissions have full control of: every module without a limit, plus those whose `full` permission is held. */
+export function fullStoresFor(permissions: Iterable<string>): Set<StoreKey> {
+  const held = new Set(permissions);
+  return new Set(
+    STORE_KEYS.filter((store) => {
+      const rule = LIMITED_WRITES[store];
+      return !rule || rule.full.some((p) => held.has(p));
+    }),
+  );
+}
+
+/**
  * Holding either of these lets someone replace or empty a whole module in one
  * request (restore a backup, "Clear a Specific Module"). Write access to a
  * module is not enough: without one of them records can only be added, changed

@@ -622,7 +622,7 @@ export function Purchases({
                   </td>
                   <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{fmtDate(o.date)}</td>
                   <td className="py-3 px-5">
-                    <AttachmentLink attachment={o.attachment} subText={subText} />
+                    <AttachmentLink attachment={o.attachment} subText={subText} store="purchaseOrders" id={o.id} />
                   </td>
                   <td className="py-3 px-5">
                     <div className="flex items-center justify-end">
@@ -725,7 +725,7 @@ export function Purchases({
                   "This purchase increased your raw material stock. It was not charged to profit — you will find it on the Statement of Financial Position under Inventory."
                 }
               </p>
-              <AttachmentLink attachment={selected.attachment} subText={subText} />
+              <AttachmentLink attachment={selected.attachment} subText={subText} store="purchaseOrders" id={selected.id} />
               {poIsUnpaid(selected) && (
                 <button
                   onClick={() => settlePurchase(selected)}

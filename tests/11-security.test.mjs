@@ -18,6 +18,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
+  api,
   BASE,
   DEAD_DB_BASE,
   THROTTLED_BASE,
@@ -1065,7 +1066,7 @@ describe("F. Logging", () => {
     await owner.delete(`/api/user/${cashier.userId}/sessions`);
     cashier = await createStaff(owner, { username: "sec-cashier2", name: "Cashier 2", roles: ["sales"] });
     await cashier.post("/api/learnex/sync", { changes: [{ store: "customers", upserts: [{ id: 9100, name: "Logged", actor: "owner", user: { username: "owner" } }], order: [9100] }], actor: "owner", username: "owner" });
-    await owner.post("/api/learnex/reset", {});
+    await api("/reset", {});
     await loadStores(shopFixture());
     const log1 = (await owner.get("/api/audit?limit=500")).body.entries;
     const actions = new Set(log1.map((e) => e.action));
@@ -1131,7 +1132,8 @@ describe("G. Components and platform", () => {
     const lock = JSON.parse(readFileSync(path.join(ROOT, "package-lock.json"), "utf8"));
     const bad = [];
     for (const [name, p] of Object.entries(lock.packages)) {
-      if (!name || p.link) continue;
+      // (a package bundled inside another one's tarball is covered by that tarball's hash)
+      if (!name || p.link || p.inBundle) continue;
       if (!p.integrity) bad.push(`${name}: no integrity hash`);
       if (p.resolved && !p.resolved.startsWith("https://registry.npmjs.org/")) bad.push(`${name}: ${p.resolved}`);
     }

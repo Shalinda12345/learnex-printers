@@ -50,7 +50,7 @@ export class Client {
       method,
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...(this.cookie ? { cookie: this.cookie } : {}),
+        ...(this.cookie || this.device ? { cookie: [this.cookie, this.device].filter(Boolean).join("; ") } : {}),
         ...headers,
       },
       body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
@@ -62,6 +62,8 @@ export class Client {
       const name = pair.slice(0, eq);
       const value = pair.slice(eq + 1);
       if (name.includes("learnex_session")) this.cookie = value ? `${name}=${value}` : null;
+      // the "known browser" cookie is only kept by clients that ask for it (keepDevice = true)
+      if (name.includes("learnex_device") && this.keepDevice) this.device = value ? `${name}=${value}` : null;
     }
     let json = null;
     try {
@@ -160,13 +162,30 @@ export async function createStaff(admin, { username, name = username, roles }) {
   return staff;
 }
 
+// Restoring, clearing and resetting need the password typed again (POST /api/auth/reauth gives a
+// proof for five minutes). The owner's calls through api() carry one, as the app's screens do.
+let reauthCache = null; // { client, token, at }
+export async function reauthToken(client, password = OWNER.password, force = false) {
+  if (!force && reauthCache && reauthCache.client === client && Date.now() - reauthCache.at < 4 * 60_000)
+    return reauthCache.token;
+  const r = await client.post("/api/auth/reauth", { password });
+  if (r.status !== 200) return null;
+  reauthCache = { client, token: r.body.token, at: Date.now() };
+  return r.body.token;
+}
+
 /** The app's data API (/api/learnex/*) as the owner (or anonymously on another server). */
 export async function api(path, body, base = BASE) {
   const client = base === BASE && defaultClient ? defaultClient : new Client(base);
-  const r =
-    body === undefined
-      ? await client.get("/api/learnex" + path)
-      : await client.post("/api/learnex" + path, body);
+  const owner = base === BASE && defaultClient === client;
+  const send = (token) => {
+    const headers = token ? { "x-reauth": token } : {};
+    return body === undefined
+      ? client.call("GET", "/api/learnex" + path, undefined, headers)
+      : client.call("POST", "/api/learnex" + path, body, headers);
+  };
+  let r = await send(owner ? await reauthToken(client) : null);
+  if (owner && r.status === 403 && r.body?.code === "reauth_required") r = await send(await reauthToken(client, OWNER.password, true));
   return { status: r.status, body: r.body };
 }
 
@@ -440,9 +459,51 @@ export async function loadStores(stores) {
   if (r.status !== 200) throw new Error("import failed: " + JSON.stringify(r.body));
 }
 
-/** Every module as the app loads it from the database. */
+/** Every module as the app loads it from the database (attached files appear as small stand-ins, see inflateAttachments). */
 export async function stores() {
   return (await api("/data")).body.stores;
+}
+
+/** The file attached to one record, downloaded on demand like the app's "View slip" does. */
+export async function attachmentOf(store, id) {
+  const res = await fetch(`${BASE}/api/learnex/attachment?store=${store}&id=${encodeURIComponent(id)}`, {
+    headers: { cookie: defaultClient.cookie },
+  });
+  if (!res.ok) return null;
+  const bytes = Buffer.from(await res.arrayBuffer());
+  return { type: res.headers.get("content-type"), dataUrl: `data:${res.headers.get("content-type")};base64,${bytes.toString("base64")}` };
+}
+
+/** Puts the real files back in place of the stand-ins that /data carries, so stores can be compared with what was imported. */
+export async function inflateAttachments(loaded) {
+  for (const [key, list] of Object.entries(loaded)) {
+    if (!Array.isArray(list)) continue;
+    for (const record of list) {
+      const a = record && record.attachment;
+      if (a && a.stored) {
+        const file = await attachmentOf(key, record.id);
+        record.attachment = { name: a.name, type: a.type, dataUrl: file.dataUrl };
+      }
+    }
+  }
+  return loaded;
+}
+
+/**
+ * The "Confirm it's you" box that restoring, clearing and resetting ask for: types the password and confirms.
+ * A confirmation is good for five minutes, so right after an earlier one the box does not appear (returns false).
+ */
+export async function confirmPassword(page, password = OWNER.password) {
+  const box = modal(page);
+  try {
+    await box.getByText("Confirm it's you").waitFor({ timeout: 2500 });
+  } catch {
+    return false;
+  }
+  await box.getByLabel("Your password").fill(password);
+  await box.getByRole("button", { name: "Confirm" }).click();
+  await box.waitFor({ state: "detached" });
+  return true;
 }
 
 /** A signed-in page with the app open (optionally on one screen of the menu). */
