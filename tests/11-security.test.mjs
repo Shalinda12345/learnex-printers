@@ -18,6 +18,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
+  api,
   BASE,
   DEAD_DB_BASE,
   THROTTLED_BASE,
@@ -650,8 +651,11 @@ describe("C. Access control", () => {
   test("SEC-24b [A01] a user manager cannot reset, disable or edit an account that holds permissions they lack (account takeover)", async () => {
     const um = await owner.post("/api/roles", { name: "Users only 2", description: "", permissions: ["users.manage"] });
     const userMgr = await staffWithRoleId(owner, "sec-um2", um.body.id);
-    const victim = await owner.post("/api/user", { username: "sec-victim", name: "Victim", roleIds: [ids.administrator] });
-    const peer = await owner.post("/api/user", { username: "sec-peer", name: "Peer", roleIds: [um.body.id] });
+    // (own usernames: "sec-victim" is taken by an earlier test, and a refused create would leave the ids undefined)
+    const victim = await owner.post("/api/user", { username: "sec-victim-admin", name: "Victim", roleIds: [ids.administrator] });
+    const peer = await owner.post("/api/user", { username: "sec-peer-um", name: "Peer", roleIds: [um.body.id] });
+    assert.equal(victim.status, 200, JSON.stringify(victim.body));
+    assert.equal(peer.status, 200, JSON.stringify(peer.body));
     const attempts = [
       ["reset Administrator's password", await userMgr.post(`/api/user/${victim.body.id}/password`, {})],
       ["disable Administrator", await userMgr.patch(`/api/user/${victim.body.id}`, { status: "disabled" })],
@@ -1062,7 +1066,7 @@ describe("F. Logging", () => {
     await owner.delete(`/api/user/${cashier.userId}/sessions`);
     cashier = await createStaff(owner, { username: "sec-cashier2", name: "Cashier 2", roles: ["sales"] });
     await cashier.post("/api/learnex/sync", { changes: [{ store: "customers", upserts: [{ id: 9100, name: "Logged", actor: "owner", user: { username: "owner" } }], order: [9100] }], actor: "owner", username: "owner" });
-    await owner.post("/api/learnex/reset", {});
+    await api("/reset", {});
     await loadStores(shopFixture());
     const log1 = (await owner.get("/api/audit?limit=500")).body.entries;
     const actions = new Set(log1.map((e) => e.action));
@@ -1128,7 +1132,8 @@ describe("G. Components and platform", () => {
     const lock = JSON.parse(readFileSync(path.join(ROOT, "package-lock.json"), "utf8"));
     const bad = [];
     for (const [name, p] of Object.entries(lock.packages)) {
-      if (!name || p.link) continue;
+      // (a package bundled inside another one's tarball is covered by that tarball's hash)
+      if (!name || p.link || p.inBundle) continue;
       if (!p.integrity) bad.push(`${name}: no integrity hash`);
       if (p.resolved && !p.resolved.startsWith("https://registry.npmjs.org/")) bad.push(`${name}: ${p.resolved}`);
     }

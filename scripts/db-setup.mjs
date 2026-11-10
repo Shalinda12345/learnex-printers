@@ -4,8 +4,17 @@
 //   npm run db:setup
 //
 // Needs two connection strings in .env:
-//   MYSQL_ADMIN_URL  an administrator login (e.g. root), only used to create the user/database
+//   MYSQL_ADMIN_URL  an administrator login (e.g. root), only used to create the user/database,
+//                    give the app's login its rights, and apply the migrations
 //   DATABASE_URL     what the app connects with (user, password, database)
+//
+// The app's login is given only what the running app needs: SELECT, INSERT, UPDATE, DELETE on
+// its own database. It cannot drop or alter tables, so a bug (or an attacker who found one) can
+// change data but not destroy the database's structure. A database whose name ends in _test
+// (the test suite wipes and rebuilds those) gets every right. Migrations are applied with the
+// administrator login; without MYSQL_ADMIN_URL they run as the app's login, which then needs
+// the right to change tables (a hosted database set up in the host's control panel: restrict
+// that login there once the tables exist).
 //
 // MySQL can't roll back schema changes, so a migration that fails part-way
 // stays partly applied. The migrations only create what's missing (IF NOT
@@ -73,7 +82,22 @@ if (MYSQL_ADMIN_URL) {
     // `_` and `%` are wildcards in a GRANT's database name; escape them so the
     // app's login can reach this database only.
     const grantDb = mysql.escapeId(database.replace(/[_%]/g, "\\$&"));
-    for (const host of hosts) await admin.query(`GRANT ALL PRIVILEGES ON ${grantDb}.* TO ?@?`, [user, host]);
+    const scratch = /_test$/.test(database);
+    for (const host of hosts) {
+      if (scratch) {
+        await admin.query(`GRANT ALL PRIVILEGES ON ${grantDb}.* TO ?@?`, [user, host]);
+        continue;
+      }
+      // take back anything beyond what the app needs (an older setup granted ALL PRIVILEGES) ...
+      try {
+        await admin.query(`REVOKE ALL PRIVILEGES ON ${grantDb}.* FROM ?@?`, [user, host]);
+      } catch (e) {
+        if (e.errno !== 1141) throw e; // 1141: it had no grant on this database yet
+      }
+      // ... and give exactly that
+      await admin.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ${grantDb}.* TO ?@?`, [user, host]);
+    }
+    console.log(scratch ? "Granted all rights (test database)." : "Granted SELECT, INSERT, UPDATE, DELETE only.");
   } finally {
     await admin.end();
   }
@@ -81,7 +105,10 @@ if (MYSQL_ADMIN_URL) {
   console.log("MYSQL_ADMIN_URL not set — assuming the user and database already exist.");
 }
 
-const conn = await mysql.createConnection({ uri: DATABASE_URL, multipleStatements: true });
+// Migrations change tables, which the app's own (restricted) login may not do: use the administrator.
+const migrationUrl = new URL(MYSQL_ADMIN_URL || DATABASE_URL);
+if (MYSQL_ADMIN_URL) migrationUrl.pathname = "/" + encodeURIComponent(database);
+const conn = await mysql.createConnection({ uri: migrationUrl.toString(), multipleStatements: true });
 try {
   await conn.query(SESSION_SETUP);
   const [[{ packet }]] = await conn.query("SELECT @@max_allowed_packet AS packet");

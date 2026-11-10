@@ -1,0 +1,873 @@
+Setting up test database hashil_test ...
+Granted all rights (test database).
+Warning: this MySQL server's max_allowed_packet is 1024 KB, so saving a record with a large attachment (e.g. a photo of a bill) will fail. Set max_allowed_packet=64M in the [mysqld] section of the server's my.ini / my.cnf (XAMPP: C:\xampp\mysql\bin\my.ini) and restart MySQL.
+Database hashil_test was already up to date.
+      · connected to database: hashil_test
+      · Granted all rights (test database). | Database hashil_test was already up to date.
+✔ DB-1 tests run on the separate test database, not the real one (17.421ms)
+✔ DB-2 `npm run db:setup` is safe to re-run (applies nothing twice) (132.4857ms)
+      · 26 tables: app_meta, app_users, audit_log, auth_role_permissions, auth_roles, auth_sessions, auth_user_roles, auth_users, business_settings, cash_accounts, customers, delivery_credit_bills, delivery_run_items, delivery_runs, ledger_entries, products, purchase_order_items, purchase_orders, raw_material_usage, raw_materials, sales_order_items, sales_order_payments, sales_orders, schema_migrations, store_state, suppliers
+      · 3 views: v_ledger, v_purchase_lines, v_sales_lines
+✔ DB-3 every module table, child table and view exists (4.3294ms)
+      · delivery_credit_bills -> delivery_runs (on delete cascade)
+      · delivery_run_items -> delivery_runs (on delete cascade)
+      · purchase_order_items -> purchase_orders (on delete cascade)
+      · sales_order_items -> sales_orders (on delete cascade)
+      · sales_order_payments -> sales_orders (on delete cascade)
+✔ DB-4 child tables cascade-delete with their parent record (1.6753ms)
+      · audit_log.user_id -> on delete set null
+      · auth_role_permissions.role_id -> on delete cascade
+      · auth_sessions.user_id -> on delete cascade
+      · auth_users.created_by -> on delete set null
+      · auth_user_roles.granted_by -> on delete set null
+      · auth_user_roles.role_id -> on delete restrict
+      · auth_user_roles.user_id -> on delete cascade
+✔ DB-9 account tables are linked safely (sessions/roles go with the user, roles in use can't vanish, the log keeps history) (18.1111ms)
+      · CaseTest / Case@Test.lk -> accepted
+      · CASETEST (same username) -> ER_DUP_ENTRY
+      · other / case@TEST.lk (same email) -> ER_DUP_ENTRY
+      · noemail1 (no email) -> accepted
+      · noemail2 (no email) -> accepted
+✔ DB-10 usernames and emails are unique regardless of upper/lower case (14.4349ms)
+      · app login: learnex_app@localhost; server-wide privileges: USAGE; databases: hashil, hashil_test
+✔ DB-5 the app logs in with its own account, which can only reach the app's databases (1.9121ms)
+      · rights on real databases: hashil:SELECT, hashil:INSERT, hashil:UPDATE, hashil:DELETE
+✔ DB-8 on the real database the app's login can only read and change data, not alter or drop tables (0.9546ms)
+      · 001_learnex_schema.sql applied 2026-10-13T09:07:12.193Z
+      · 002_auth.sql applied 2026-10-13T09:07:12.250Z
+✔ DB-6 the migration is recorded in schema_migrations (0.8129ms)
+      · bind_address = (all interfaces); skip_networking = 0
+      · account root@localhost (mysql_native_password, no password)
+      · account learnex_app@localhost (mysql_native_password)
+      · account root@127.0.0.1 (mysql_native_password, no password)
+      · account root@::1 (mysql_native_password, no password)
+      · account pma@localhost (mysql_native_password, no password)
+      · account learnex_app@127.0.0.1 (mysql_native_password)
+      · account learnex_app@::1 (mysql_native_password)
+      · account shen@localhost (mysql_native_password)
+      · mysql: running=true, auto-start=true
+✖ DB-7 MySQL only accepts logins from this PC, and every login needs a password (6.4978ms)
+✔ DB-8 MySQL runs as a Windows service that starts automatically (64.0762ms)
+      · GET /data -> 200 {"initialized":false,"stores":{},"access":{"settings":"write","products":"write","salesOrders":"write","ledger":"write","rawMaterials":"write","rawMaterialUsage":"write","deliveryRuns":"write","cashAccounts":"write","purchaseOrders":"write","customers":"write","suppliers":"write","users":"write"},"versions":{}}
+▶ empty database
+  ✔ API-1 a fresh database reports not-initialized and no modules (7.1441ms)
+✔ empty database (849.4514ms)
+      · products: 17 records in, 17 records out
+      · customers: 8 records in, 8 records out
+      · suppliers: 7 records in, 7 records out
+      · salesOrders: 13 records in, 13 records out
+      · purchaseOrders: 1 records in, 1 records out
+      · rawMaterials: 45 records in, 45 records out
+      · rawMaterialUsage: 1 records in, 1 records out
+      · deliveryRuns: 2 records in, 2 records out
+      · ledger: 16 records in, 16 records out
+      · cashAccounts: 2 records in, 2 records out
+      · settings: object in, object out
+      · users: 4 records in, 4 records out
+      · first ledger id in and out: TXN-9004 TXN-9004
+      · settings.taxRate = "8.5"
+      · SO-T1.lineItems = null
+      · DR-1002.lineItems = []
+      · attachment: r.png 118 chars
+      · SO-T1.date = 2026-02-30
+      · customerId = 1760000000000123
+      · amountPaid = 0.30000000000000004 | cost = 1e-7 | PO cost = 35.125
+      · sku = 12345 price = "12"
+▶ import → reload round trip (real backup + edge cases)
+  ✔ API-2 import marks the database initialized (0.395ms)
+  ✔ API-3 round trip identical: products (0.5174ms)
+  ✔ API-3 round trip identical: customers (0.1619ms)
+  ✔ API-3 round trip identical: suppliers (0.1474ms)
+  ✔ API-3 round trip identical: salesOrders (0.292ms)
+  ✔ API-3 round trip identical: purchaseOrders (0.1219ms)
+  ✔ API-3 round trip identical: rawMaterials (0.2164ms)
+  ✔ API-3 round trip identical: rawMaterialUsage (0.1101ms)
+  ✔ API-3 round trip identical: deliveryRuns (0.1832ms)
+  ✔ API-3 round trip identical: ledger (0.1884ms)
+  ✔ API-3 round trip identical: cashAccounts (0.0793ms)
+  ✔ API-3 round trip identical: settings (0.0747ms)
+  ✔ API-3 round trip identical: users (0.0737ms)
+  ✔ API-4 list order is preserved (newest-first lists stay newest-first) (0.179ms)
+  ✔ API-5 a tax rate typed as text stays text ("8.5", not 8.5) (0.0785ms)
+  ✔ API-6 a record with no line-item list reloads with no list (null), not an empty one (0.0867ms)
+  ✔ API-7 an empty line-item list reloads as []  (0.0796ms)
+  ✔ API-8 attachments (data URLs) survive byte-for-byte (0.1026ms)
+  ✔ API-9 an impossible date (2026-02-30) is kept as typed, not rejected (0.1036ms)
+  ✔ API-10 16-digit ids (Date.now()-based) keep full precision (0.1176ms)
+  ✔ API-11 decimals keep exact JS values (0.1+0.2, 1e-7, 35.125) (0.1067ms)
+  ✔ API-12 values of the wrong type keep their type (sku 12345 number, price "12" text) (0.0832ms)
+      · price = 1.5e-31, cost = 1e+35, name = 300005 chars, supplier lastOrder = 0999-12-31 | row: price=null, cost=null, name=null, 3 value(s) in extra
+      · extraFlag = true | lineItem.custom = {"a":1} | settings.logoNote = custom ✓
+      · ledgerTxnIds = [null,"TXN-9000"]
+  ✔ API-32 values MySQL can't hold exactly are kept as given (1.5e-31, 1e35, 300 KB text, year 999) (6.2595ms)
+  ✔ API-13 fields the schema doesn't know are kept (custom fields, nested objects) (0.3253ms)
+  ✔ API-14 id lists containing null survive ([null, "TXN-9000"]) (0.1304ms)
+  ✔ API-15 unicode text survives (₹ — ✓) (0.0962ms)
+      · products[1]: {"name":"HP LaserJet Pro M404dn","price":"42500.000000000000000000000000000000","stock":"23.000000000000000000000000000000","min_stock":"10.000000000000000000000000000000"}
+      · sales_order_items(SO-T2): [{"line_no":1,"product_id":1,"qty":"2.000000000000000000000000000000","price":"42500.500000000000000000000000000000"}]
+      · sales_order_payments(SO-T2): [{"line_no":1,"date":"2026-10-13","amount":"0.300000000000000000000000000000","extra":"{}"},{"line_no":2,"date":null,"amount":null,"extra":"{\"date\":\"\",\"amount\":\"5\"}"}]
+      · purchase_order_items(PO-4001): [{"material_id":1,"qty":"3.000000000000000000000000000000","cost":"35.125000000000000000000000000000"}]
+      · delivery_run_items(DR-1001): [{"product_id":4,"taken":"10.000000000000000000000000000000","sold":"8.000000000000000000000000000000","over_sold":false,"sales":"[{\"qty\":5,\"price\":3200},{\"qty\":3,\"price\":3100}]"}]
+      · delivery_credit_bills(DR-1001): {"shop":"Shop A","total":"3100.000000000000000000000000000000"}
+      · ledger_entries(TXN-9004): {"date":"2026-10-13","description":"Receipt","amount":"1234.560000000000000000000000000000","account":"CASH-MAIN","kind":"opex","cash":true}
+  ✔ API-16 data is stored in real columns and child tables (5.2614ms)
+      · v_sales_lines: {"order_id":"SO-1043","invoice":"INV-2462","product_name":"HP LaserJet Pro M404dn","sku":"PRN-HP404","qty":"1.000000000000000000000000000000","line_total":"42500.00000000000000000000000000000000000000"}
+      · v_sales_lines: {"order_id":"SO-T2","invoice":"INV-T2","product_name":"HP LaserJet Pro M404dn","sku":"PRN-HP404","qty":"2.000000000000000000000000000000","line_total":"85001.00000000000000000000000000000000000000"}
+      · v_purchase_lines: {"order_id":"PO-4001","material_name":"Double Tape","qty":"3.000000000000000000000000000000","line_total":"105.37500000000000000000000000000000000000"}
+      · v_ledger: {"id":"TXN-8822","signed_amount":"45900.000000000000000000000000000000","account":"CASH-MAIN","account_name":"Cash Account"}
+      · v_ledger: {"id":"TXN-9004","signed_amount":"-1234.560000000000000000000000000000","account":"CASH-MAIN","account_name":"Cash Account"}
+  ✔ API-17 the reporting views join modules together (4.5745ms)
+✔ import → reload round trip (real backup + edge cases) (175.3577ms)
+      · edited product 3 (stock 0 -> -1); rows rewritten: 3
+▶ saving changes (/sync)
+  ✔ API-18 editing one record rewrites only that row (62.9053ms)
+      · added 1760000000000555 at the top, deleted 2, moved 1 to the end; 17 -> 17 products
+  ✔ API-19 add + delete + reorder in one change (35.1469ms)
+      · SO-T2 line items before: 1; after delete: items=0, payments=0
+  ✔ API-20 deleting an order also deletes its line items and payments (22.0193ms)
+      · -> 400 products: a record has an invalid id "not-a-number"; customer name in DB is still "Golden Star Traders"
+  ✔ API-21 several modules saved in one request are all-or-nothing (22.6939ms)
+      · users: [{"name":"Only User","email":"o@x.lk","role":"Administrator","status":"Active"}] | settings: {"businessName":"X","taxRate":0,"currency":"USD ($)","notifDaily":true}
+  ✔ API-22 settings and users are saved as a whole (19.91ms)
+      · save 2500 -> 200; reverse the order -> 200; delete 1,500 -> 200, 1000 left
+  ✔ API-35 long lists are saved, reordered and deleted in batches (2,500 ledger entries) (340.9201ms)
+✔ saving changes (/sync) (600.7594ms)
+      · -> 400 ledger: more than one record has the id TXN-X
+▶ bad requests are refused without changing anything
+  ✔ API-23 duplicate ids (5.1934ms)
+      · -> 400 customers: a record has an invalid id "abc"
+  ✔ API-24 wrong id type for the module (3.8664ms)
+      · -> 400 ledger: a record has an invalid id "TXN-X "
+  ✔ API-33 a text id ending in a space (MySQL would treat it as the same id without the space) (5.4275ms)
+      · -> 400 ledger: a record has an invalid id "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"
+  ✔ API-34 a text id longer than the id column (191 characters) (3.6605ms)
+      · -> 400 products: order is required when saving records
+  ✔ API-25 records without the list order (3.5303ms)
+      · -> 400 unknown module "invoices"
+  ✔ API-26 unknown module (3.8901ms)
+      · -> 400 changes must be a non-empty list
+  ✔ API-27 empty change list (3.4363ms)
+      · -> 400 settings: value must be an object
+  ✔ API-28 settings that aren't an object (3.3769ms)
+      · -> 400 request body must be a JSON object
+  ✔ API-29 malformed JSON body (3.1861ms)
+✔ bad requests are refused without changing anything (36.0426ms)
+      · reset -> 200; initialized=true; modules={}; rows left=0
+▶ reset and server errors
+  ✔ API-30 factory reset deletes every record but keeps the database set up (15.9929ms)
+      · GET /api/auth/me on a server whose database is unreachable -> 500 Database error: the database server can't be reached. Check that MySQL is running.
+  ✔ API-31 if the database is down, the API answers 500 with the reason in plain words — no address, port or SQL (80.3111ms)
+✔ reset and server errors (96.5051ms)
+      · TCP 0.0.0.0:3311 0.0.0.0:0 LISTENING 28028
+      · TCP [::]:3311 [::]:0 LISTENING 28028
+✔ LIMIT-2 [known] the app is served over plain HTTP on every network interface, so passwords cross the network unencrypted from other PCs (687.7619ms)
+      · PC A: Sale completed — Rs. 23,652 received via Cash. Invoice INV-2462 generated.
+      · PC B: Sale completed — Rs. 23,652 received via Cash. Invoice INV-2462 generated.
+      · 2 sales of 1 unit each -> stock 8 -> 7 (correct would be 6)
+      · sales_orders 10 -> 11 (correct would be 12); both PCs issued the same invoice number
+✔ LIMIT-3 [known] two PCs selling at the same time: one sale and one stock update are lost (4082.9704ms)
+      · GET /api/auth/me -> {"user":null,"setupRequired":true,"setupAvailable":true}
+▶ first run: creating the owner account
+  ✔ AUTH-1 a brand-new install asks for the owner account (20.1262ms)
+      · 16 endpoints: GET /api/learnex/data -> 401 | POST /api/learnex/sync -> 401 | POST /api/learnex/import -> 401 | POST /api/learnex/reset -> 401 | GET /api/user -> 401 | POST /api/user -> 401 | PATCH /api/user/1 -> 401 | PUT /api/user/1/role -> 401 | POST /api/user/1/password -> 401 | DELETE /api/user/1/sessions -> 401 | GET /api/roles -> 401 | POST /api/roles -> 401 | PATCH /api/roles/1 -> 401 | DELETE /api/roles/1 -> 401 | GET /api/audit -> 401 | POST /api/auth/password -> 401
+  ✔ AUTH-2 every protected endpoint refuses requests without a session (401) (68.7486ms)
+      · wrong code -> 403 "That setup code is not correct."
+      · weak password -> 400 "Use at least 8 characters."
+      · password = username -> 400 "The password can't be the same as the username."
+  ✔ AUTH-3 the owner can't be created with a wrong setup code or a weak password (11.7934ms)
+      · Password123 -> 400 "That password is too common. Choose something harder to guess." | 12345678 -> 400 "That password is too common. Choose something harder to guess." | iloveyou1 -> 400 "That password is too common. Choose something harder to guess."
+  ✔ AUTH-55 the owner can't be created with a very common password (12.6986ms)
+      · Set-Cookie: learnex_session=<token>; Path=/; Expires=Tue, 17 Nov 2026 17:53:07 GMT; HttpOnly; SameSite=lax
+      · signed in as: Test Owner | roles: Owner | permissions: 19
+      · default roles: Owner (system), Administrator, Sales & POS, Inventory Manager, Accountant
+  ✔ AUTH-4 the right setup code creates the owner, the default roles, and signs in with a safe cookie (267.7841ms)
+      · second registration -> 403 "The owner account already exists. Sign in instead."
+  ✔ AUTH-5 registration closes once the owner exists (218.3077ms)
+      · stored password: scrypt$65536$8$2$<salt>$<hash>
+      · session ids in DB: 2; cookie token itself stored: false; its SHA-256 stored: true
+  ✔ AUTH-6 passwords are stored as scrypt hashes and session tokens only as SHA-256 (227.8962ms)
+      · registrations -> 200 / 403; accounts created: owner
+  ✔ AUTH-40 two first-run registrations at the same moment create only one owner (406.5687ms)
+✔ first run: creating the owner account (1348.3666ms)
+      · wrong password -> 401 "Incorrect username or password." | unknown user -> 401 "Incorrect username or password."
+▶ signing in
+  ✔ AUTH-7 a wrong password and an unknown username get the same answer (609.0393ms)
+      · login as OWNER@LEARNEX.TEST -> 200
+  ✔ AUTH-8 sign-in works with the email address too, case-insensitively (213.5855ms)
+      · 5 wrong attempts -> 401, 401, 401, 401, 401; then correct password -> 429 "Too many failed attempts. Try again in 15 minute(s), sign in from a browser you have used before, or ask an administrator to reset your password."
+      · DB: failed_login_count=5, locked=1
+  ✔ AUTH-9 five wrong passwords lock the account — even the right password is refused while locked (1296.2523ms)
+      · reset -> 200, one-time password format: xxxx-xxxx-xxxx; sign-in with it -> 200; must change: true
+  ✔ AUTH-10 an administrator's password reset unlocks the account and issues a one-time password (443.5786ms)
+      · after sign-out, the old cookie -> 401
+  ✔ AUTH-11 signing out ends the session on the server (the old cookie stops working) (240.9982ms)
+      · idle-expired session -> 401; row left in DB: 0
+  ✔ AUTH-12 an idle session expires (12h) and is deleted (227.3081ms)
+      · session past its absolute limit -> 401
+  ✔ AUTH-13 the 7-day absolute limit is enforced even while the session is in use (222.8219ms)
+      · idle expiry after use: 12.00 hours left (was 10); within absolute limit: 1
+  ✔ AUTH-14 using a session slides its idle expiry forward (but never past the absolute limit) (216.7373ms)
+      · 20 simultaneous wrong passwords -> 5 checked (401), 15 refused (429)
+      · DB: failed_login_count=5, locked=1; then the right password -> 429
+  ✔ AUTH-41 five wrong passwords sent at the same moment lock the account: only five are checked (2543.8111ms)
+      · 12 wrong guesses -> 5 checked; the right password sent meanwhile -> 429
+  ✔ AUTH-42 a right password that arrives while wrong ones are still being checked is refused once the account is locked (1891.6653ms)
+      · 5 simultaneous guesses (the 3rd is right) -> 401, 401, 200, 401, 401; failed_login_count=0
+  ✔ AUTH-43 the right password among the first five simultaneous guesses still signs in and clears the count (1396.8208ms)
+      · guess after the lock ended -> 401; failed_login_count=1, locked_until=null
+  ✔ AUTH-44 after a lock ends the count starts again: one wrong guess does not lock the account a second time (2379.6682ms)
+      · 10,000-character username -> 401 "Incorrect username or password."; kept in the log: 101 characters; 70 KB -> 413 too_large
+  ✔ AUTH-49 a huge username gets the normal answer and only a short label in the activity log (220.3344ms)
+      · 2 MB sign-in -> 413 too_large; 2 MB staff-account request -> 413; a normal wrong sign-in -> 401
+  ✔ AUTH-50 an oversized request body is refused without being read (230.6913ms)
+      · attempts 1-6 on a real account: 401 401 401 401 401 429 | on a name nobody has: 401 401 401 401 401 429
+      · 6th answer: real "Too many failed attempts. Try again in 15 minute(s), sign in from a browser you have used before, or ask an administrator to reset your password." | unknown "Too many failed attempts. Try again in 15 minute(s), sign in from a browser you have used before, or ask an administrator to reset your password."
+  ✔ AUTH-51 a name that is not an account is locked after the same five attempts, so 'locked' proves nothing (3468.8133ms)
+✔ signing in (16735.3089ms)
+      · 14 attempts from one client -> 401 401 401 401 401 401 401 401 401 401 429 429 429 429
+      · refusal: 429 rate_limited "Too many attempts. Wait 58 seconds and try again." Retry-After=58
+      · another client meanwhile -> 401
+▶ throttling sign-in attempts
+  ✔ AUTH-52 one client is limited to 10 sign-in attempts a minute, and another client is not affected (2776.212ms)
+      · 45 attempts, each from a different address -> ·············································
+  ✔ AUTH-53 there is no limit shared by everybody: many different clients never block each other (10137.8376ms)
+      · /api/auth/me while sign-ins are throttled -> 200
+  ✔ AUTH-54 a throttled client is not locked out of anything else: the status call is never throttled (5.9252ms)
+✔ throttling sign-in attempts (12920.2767ms)
+      · created -> 200; mustChangePassword=true; data before change -> 403 (password_change_required)
+      · password change -> 200; data after -> 200; one-time password afterwards -> 401
+▶ staff accounts and one-time passwords
+  ✔ AUTH-15 a new staff member must replace the one-time password before using the system (1157.364ms)
+      · create "NIMAL" when "nimal" exists -> 409 "That username is already taken."
+  ✔ AUTH-16 usernames are unique regardless of case (214.4851ms)
+      · change -> 200; this device still signed in: true; other device -> 401
+  ✔ AUTH-17 changing your own password signs out your other devices (1382.0346ms)
+      · password1 -> 400, Welcome2026! -> 400, qwertyuiop -> 400, 11111111 -> 400; a good password -> 200
+  ✔ AUTH-56 a very common password cannot be chosen; a good one still can (2024.8044ms)
+✔ staff accounts and one-time passwords (5107.5714ms)
+      · access: {"settings":"read","customers":"write","products":"write","deliveryRuns":"write","ledger":"write","salesOrders":"write","cashAccounts":"read"}
+      · modules returned: products, customers, salesOrders, deliveryRuns, ledger, cashAccounts, settings
+▶ what each role can load and save
+  ✔ AUTH-18 Sales & POS only receives the modules its screens need (7.4357ms)
+      · POS-style save by cashier -> 200; order in DB: {"id":"SO-AUTH1","amount":"42500.000000000000000000000000000000"}
+  ✔ AUTH-19 Sales & POS can save a POS sale (orders + stock + customers + ledger) in one request (22.9097ms)
+      · -> 403 "You don't have permission to change Suppliers. Nothing was saved."; customer name still "Golden Star Traders"
+  ✔ AUTH-20 Sales & POS can't change suppliers — and the whole batch is refused (17.3072ms)
+      · -> 403 "You don't have permission to change Customers. Nothing was saved."
+  ✔ AUTH-21 Inventory Manager can't change customers (13.6158ms)
+      · -> 403 "You don't have permission to change Products & Inventory. Nothing was saved."
+  ✔ AUTH-22 Accountant can't change products (12.07ms)
+      · -> 403 "You don't have permission to change Business Settings. Nothing was saved."
+  ✔ AUTH-23 Sales & POS can't change business settings (11.8046ms)
+      · products -> 200
+      · suppliers -> 200
+  ✔ AUTH-24 Inventory Manager can change products and suppliers (29.8642ms)
+      · ledger -> 200
+      · cashAccounts -> 200
+  ✔ AUTH-25 Accountant can change the ledger and cash accounts (29.5812ms)
+      · settings -> 200
+  ✔ AUTH-26 Administrator can change business settings (13.8505ms)
+      · cashier  POST /api/learnex/reset -> 403
+      · cashier  POST /api/learnex/import -> 403
+      · cashier  GET /api/user -> 403
+      · cashier  GET /api/roles -> 403
+      · cashier  GET /api/audit -> 403
+      · accounts GET /api/audit -> 403
+      · manager  POST /api/learnex/reset -> 403
+      · manager  GET /api/user -> 200
+      · manager  GET /api/audit -> 200
+  ✔ AUTH-27 only the right roles reach import, factory reset, users, roles and the activity log (26.4525ms)
+      · owner import on a set-up database -> 409 "The database is already set up. Use Settings → Data & Backup → Restore instead."
+  ✔ AUTH-28 import is refused once the database is set up (no accidental wipe) (2.7616ms)
+      · replace ledger with nothing -> 403 replace_forbidden "You don't have permission to replace everything in Accounting Ledger. Nothing was saved."
+      · replace products with one record -> 403; ledger 16 -> 16; products 15 -> 15
+  ✔ AUTH-45 Sales & POS cannot replace a module that already has data (replace is refused, nothing changes) (522.8798ms)
+      · first replace on an empty, never-saved module -> 200; second replace -> 403 replace_forbidden; customers left: 7001
+  ✔ AUTH-46 the very first save of a module nobody has saved yet is still allowed with replace — but only once (916.6419ms)
+      · delete all 15 in one request -> 403 wipe_forbidden; ledger still 15
+      · delete 14 of them -> 200; delete the last one -> 200; ledger now 0
+  ✔ AUTH-47 one request cannot delete every record of a module that has many; deleting a few at a time still works (887.4941ms)
+      · administrator replaces the ledger -> 200, now TXN-ADMIN-1; owner deletes all 15 entries -> 200, 0 left; administrator deletes all 15 products -> 200, 0 left
+  ✔ AUTH-48 the administrator (restore) and the owner (reset) can still replace and empty whole modules (1140.8073ms)
+      · a price of -1 -> 400 "Products & Inventory 1: price can't be negative (-1). Nothing was saved."
+      · stock of -999 -> 400 "Products & Inventory 1: stock can't be negative (-999). Nothing was saved."
+      · a -500,000 sale -> 400 "Sales Orders "SO-BAD": amount can't be negative (-500000). Nothing was saved."
+      · a sale paid for far more than it is worth -> 400 "Sales Orders "SO-BAD": amountPaid (99999) can't be more than amount (100). Nothing was saved."
+      · a -1e12 expense -> 400 "Accounting Ledger "TXN-BAD": amount can't be negative (-1000000000000). Nothing was saved."
+      · an expense dated 2099 -> 400 "Accounting Ledger "TXN-BAD": date (2099-01-01) is too far in the future. Nothing was saved."
+      · an absurdly large figure -> 400 "Products & Inventory 1: price (1e+30) is unrealistically large. Nothing was saved."
+      · cost-of-goods reversal -> 200; order refunded in full -> 200; the owner saving stock -1 -> 200
+  ✔ AUTH-58 Sales & POS cannot save impossible figures; what the app really writes still goes through (2259.5938ms)
+✔ what each role can load and save (10234.826ms)
+      · -> 403 "You can't assign or remove the "Owner" role — it has permissions you don't have."
+▶ no one can give themselves (or others) more power
+  ✔ AUTH-29 an administrator can't assign the Owner role (3.3201ms)
+      · -> 403 "A role can only include permissions you have yourself."
+  ✔ AUTH-30 an administrator can't create a role with a permission they don't have (factory reset) (2.7242ms)
+      · admin changes own roles -> 403; admin disables self -> 403; owner drops own owner role -> 403
+  ✔ AUTH-31 nobody can change their own roles or disable themselves (11.7497ms)
+      · admin → owner: reset password 403, disable 403, sign out 403
+  ✔ AUTH-32 only an owner can touch an owner's account (220.7052ms)
+      · edit Owner role -> 403; delete -> 403
+  ✔ AUTH-33 the Owner role itself can't be edited or deleted (6.7719ms)
+✔ no one can give themselves (or others) more power (1461.7003ms)
+      · save with pos.use -> 200; after the owner removed pos.use (no re-login) -> 403
+▶ changes take effect immediately
+  ✔ AUTH-34 removing a permission from a role blocks its users on their very next request (15.4685ms)
+      · delete role in use -> 409 "1 user(s) still have the "Temp Cashier" role. Change their roles first."; delete unused role -> 200
+  ✔ AUTH-35 a role that people still have can't be deleted; an unused one can (12.6014ms)
+      · disable -> 200; existing session -> 401; new sign-in -> 403 "This account has been disabled. Ask an administrator."; sessions left: 0
+  ✔ AUTH-36 disabling an account signs it out everywhere and blocks sign-in (215.764ms)
+✔ changes take effect immediately (1758.0618ms)
+      · POST reset with Origin evil.example -> 403 "Cross-site request refused."; same-origin POST -> 200; GET -> 200
+▶ request safety
+  ✔ AUTH-37 a request from another website is refused (CSRF), a same-site one is accepted (12.1191ms)
+      · Cache-Control: no-store
+  ✔ AUTH-38 API responses are never cached (238.7568ms)
+      · page CSP: default-src 'self'; script-src 'self' 'nonce-ZWMyZTQ0YjQtODZmYy00N2U3LWIzNTktOTYyMjZlY2YzM2Vl' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+      · api CSP: default-src 'none'; frame-ancestors 'none'; HSTS over http: null; over https: max-age=31536000
+  ✔ AUTH-57 pages and API answers carry the browser security headers; HSTS only over HTTPS (28.7883ms)
+      · latest entries: logme:data.save | owner:role.create | logme:auth.password_change | logme:auth.login | owner:user.create | owner:auth.login_failed | owner:auth.login | owner:auth.login | owner:auth.logout | owner:auth.setup
+      · production packages: {"info":0,"low":0,"moderate":0,"high":0,"critical":0,"total":0}
+  ✔ AUTH-39 the activity log records sign-ins, failures, account and role changes, and who saved data (1351.938ms)
+✔ request safety (1965.6149ms)
+▶ dependencies
+  ✔ DEP-1 npm audit finds no critical or high advisory in the production dependencies (755.5345ms)
+✔ dependencies (755.6459ms)
+      · after setup the app opens; header: LEARNEX ERP Search products, invoices, customers… Ctrl K Saved Backup TO Test Owner Owner
+▶ in the browser
+  ✔ AUTH-UI-1 a brand-new install walks the owner through account creation (2112.4079ms)
+      · wrong password shows: "Incorrect username or password."; signed in; signed out; after reload still signed out
+  ✔ AUTH-UI-2 sign in, wrong password message, sign out (2631.7258ms)
+      · one-time password shown: xxxx-xxxx-xxxx; table row: Kasun Perera @kasun Sales & POS Active One-time password Never Reset password Disable
+  ✔ AUTH-UI-3 the owner adds a staff member in Settings → Users & Roles and gets a one-time password (1827.6924ms)
+      · forced password change completed; app opened
+  ✔ AUTH-UI-4 the new staff member must choose a password at first sign-in (2159.6234ms)
+      · menu: Point of Sale | Sales Orders | Delivery Stock | Customers
+      · header: LEARNEX ERP Search products, invoices, customers… Ctrl K Saved KP Kasun Perera Sales & POS
+  ✔ AUTH-UI-5 a Sales & POS user only sees their screens, and no Backup button (777.5302ms)
+      · Sale completed — Rs. 3,456 received via Cash. Invoice INV-2463 generated.
+      · order SO-1044 in DB; activity log: kasun saved products, salesOrders, ledger
+  ✔ AUTH-UI-6 the Sales & POS user completes a POS sale; it is saved and logged under their name (1321.1679ms)
+      · administrator 13 screens: Dashboard, Point of Sale, Sales Orders, Delivery Stock, Customers, Products & Inventory, Raw Materials, Purchases, Suppliers, Cash & Bank, Accounting, Reports, Settings
+      · sales         4 screens: Point of Sale, Sales Orders, Delivery Stock, Customers
+      · inventory     4 screens: Products & Inventory, Raw Materials, Purchases, Suppliers
+      · accountant    5 screens: Dashboard, Cash & Bank, Accounting, Reports, Settings
+  ✔ AUTH-UI-7 every default role can open every screen it's allowed, with no errors and no refused saves (15567.2176ms)
+      · after being disabled, the save was refused and the sign-in screen appeared; price in DB still 21900.000000000000000000000000000000
+  ✔ AUTH-UI-8 when the owner disables a signed-in user, their next action returns them to the sign-in screen (2537.1068ms)
+      · 11/10/2026, 11:24:28 PM owner userUpdated user “leaver”: disabled the account
+      · 11/10/2026, 11:24:27 PM leaver authChanged their password
+      · 11/10/2026, 11:24:27 PM leaver authSigned in
+      · 11/10/2026, 11:24:27 PM owner userAdded user “leaver” (Inventory Manager)
+      · 11/10/2026, 11:24:24 PM screen-accountant authChanged their password
+      · 11/10/2026, 11:24:23 PM screen-accountant authSigned in
+  ✔ AUTH-UI-9 the Activity Log screen lists what happened, newest first (654.3889ms)
+✔ in the browser (30688.5262ms)
+      · search, category filter and the out-of-stock card all behave
+▶ Point of Sale
+  ✔ POS-1 search and category buttons narrow the product grid; out-of-stock products can't be added (1285.5286ms)
+      · Current Sale Clear 2 items Customer Walk-in Customer Acme Traders Bob Retail Beta Toner Rs. 250 × 1 1 Alpha Printer Rs. 1,000 × 2 2 Subtotal Rs. 2,250 Tax (10%) Rs. 225 Total Rs. 2,475 Payment Method 
+  ✔ POS-2 the cart: quantities can't go below 1 or above the stock, lines can be removed, totals include tax (1166.2956ms)
+      · Sale completed — Rs. 2,200 received via Cash. Invoice INV-2462 generated.
+      · order: {"id":"SO-1043","invoice":"INV-2462","customer":"Walk-in Customer","items":2,"lineItems":[{"productId":101,"name":"Alpha Printer","qty":2,"price":1000}],"amount":2200,"tax":200,"status":"Delivered","payment":"Paid","date":"2026-11-10","channel":"POS","amountPaid":2200,"payments":[{"date":"2026-11-10","amount":2200}],"accrued":true}
+      · ledger: [{"id":"TXN-8822","date":"2026-11-10","desc":"POS sale — INV-2462 (Walk-in Customer)","type":"Income","category":"Sales","amount":2200,"account":"CASH-MAIN","kind":"revenue"},{"id":"TXN-8823","date":"2026-11-10","desc":"Cost of goods sold — INV-2462","type":"Expense","category":"Cost of Goods Sold","amount":1200,"kind":"cogs","cash":false}]
+  ✔ POS-3 a walk-in cash sale saves the order, reduces stock and books revenue + cost of goods sold (1318.1828ms)
+      · order customerId=201; revenue account=BANK-MAIN; Acme orders=1 spent=275
+  ✔ POS-4 a card sale to a customer goes to the Bank Account and updates the customer's totals (1146.7841ms)
+  ✔ POS-5 a bank payment also goes to the Bank Account (1164.0305ms)
+✔ Point of Sale (6601.8192ms)
+      · Sales order SO-1043 created for Acme Traders — Rs. 3,300.
+▶ Sales Orders
+  ✔ SO-1 a paid order reduces stock, adds to the customer's spend and books cash revenue + cost of goods sold (2121.0493ms)
+      · order: {"amount":1650,"tax":150,"items":3,"lineItems":[{"productId":101,"name":"Alpha Printer","qty":1,"price":1000,"availableStock":10},{"productId":102,"name":"Beta Toner","qty":2,"price":250,"availableStock":3}]}
+  ✔ SO-2 an unpaid order with two items becomes a receivable: revenue is booked, but no cash (2136.4381ms)
+      · alert: Not enough stock for Beta Toner. Only 3 available.
+  ✔ SO-3 ordering more than the stock is refused with a message, and nothing is saved (1483.9643ms)
+      · Rs. 650 received from Acme Traders. Balance remaining Rs. 1,000.
+  ✔ SO-4 collecting part of an invoice records a receipt, not new income, and lowers the balance (2899.043ms)
+      · payment=Paid, paid=275, customer outstanding=0
+  ✔ SO-5 'Settle full balance' marks the invoice paid (2897.2428ms)
+      · blank -> "Enter a payment amount greater than 0."; 300 of 275 -> "Payment cannot be more than the outstanding balance of Rs. 275."
+  ✔ SO-6 a payment of 0, or more than the balance, is refused (2678.2189ms)
+      · {"id":"TXN-8822","date":"2026-11-10","desc":"Payment received — INV-1000","type":"Income","category":"Sales","amount":500,"account":"CASH-MAIN","kind":"revenue"}
+  ✔ SO-7 collecting an invoice raised before the accounting upgrade books the money as sales revenue (2146.5002ms)
+      · Order SO-1043 deleted.
+  ✔ SO-8 deleting an order puts the stock back, reverses the customer's totals and removes its ledger lines (2624.0743ms)
+      · summary: Rs. 600 1
+  ✔ SO-9 search, status filter and 'credit bills / outstanding' filter (737.396ms)
+      · attachment: slip.png, image/png, 118 chars
+  ✔ SO-10 an invoice slip can be attached to a new order and viewed from the list (2148.1158ms)
+  ✔ SO-11 a slip bigger than 2.5 MB is refused (1252.4548ms)
+  ✔ SO-12 'New Order' is disabled while there are no customers (650.3207ms)
+      · Invoice INV-2462 - Acme Traders
+  ✔ SO-13 an order prints as an invoice with the business profile, from the list or the order itself (2645.2631ms)
+  ✔ SO-13 a custom unit price can be inserted and saved in a new sales order (1488.3018ms)
+✔ Sales Orders (27909.6373ms)
+      · {"Total Customers":"2","Lifetime Revenue":"Rs. 500","Outstanding Balance":"Rs. 0","Wholesale Accounts":"1"}
+▶ Customers
+  ✔ CUS-1 the summary cards add up the customer list (596.2367ms)
+      · Corner Shop added as a customer. {"id":1794333306549459,"name":"Corner Shop","contact":"Chamari","phone":"077 123 4567","email":"corner@shop.lk","tier":"Wholesale","orders":0,"spent":0,"outstanding":0}
+  ✔ CUS-2 a new customer is saved with zero orders, spend and balance (1329.5422ms)
+  ✔ CUS-3 a customer can't be added without a name (1228.4901ms)
+  ✔ CUS-4 search and the tier filter (639.1916ms)
+      · confirm: Delete customer "Bob Retail"?
+  ✔ CUS-5 deleting a customer (after confirming) (1110.923ms)
+✔ Customers (4905.0346ms)
+      · {"Total Stock Value":"Rs. 6,300","Total SKUs":"3","Low Stock":"1","Out of Stock":"1"}
+▶ Products & Inventory
+  ✔ INV-1 summary cards: stock value at cost, SKUs, low stock and out of stock (883.2132ms)
+  ✔ INV-2 each product shows its stock status (662.3053ms)
+      · Delta Scanner added to inventory. {"id":1794333313703356,"name":"Delta Scanner","sku":"DEL-4","category":"Spare Parts","price":199.99,"cost":120.5,"stock":7,"min":3,"unit":"unit"}
+  ✔ INV-3 adding a product keeps decimal prices (2119.9313ms)
+  ✔ INV-4 a product needs a name, SKU, cost and price (1254.0674ms)
+      · {"id":102,"name":"Beta Toner","sku":"BET-2","category":"Ink & Toner","price":275.5,"cost":100,"stock":12,"min":5,"unit":"pc"}
+  ✔ INV-5 editing a product changes only that product (1288.978ms)
+  ✔ INV-6 deleting a product (after confirming) (1070.4509ms)
+  ✔ INV-7 search by name or SKU, and filter by category or stock status (646.3019ms)
+✔ Products & Inventory (8466.794ms)
+▶ Suppliers
+  ✔ SUP-1 summary cards (578.1213ms)
+      · Ink World added as a supplier. {"id":1794333320638571,"name":"Ink World","contact":"Ian","phone":"033","email":"ink@world.lk","category":"Ink","purchased":0,"status":"On Hold"}
+  ✔ SUP-2 a new supplier starts with nothing purchased (2123.4155ms)
+  ✔ SUP-3 search and delete (1110.6627ms)
+✔ Suppliers (3812.7202ms)
+      · {"Total Raw Materials Value":"Rs. 1,040","Materials":"2","Total Available Stock":"11","Low Stock Materials":"1"}
+▶ Raw Materials
+  ✔ RM-1 summary cards: value at average cost, stock and low-stock count (608.0639ms)
+      · {"id":1794333324395722,"name":"Copper Wire","category":"Metals","supplier":"Old Supplies","unit":"m","purchaseQty":25,"availableQty":25,"costPrice":12.5,"purchaseDate":"2026-03-01","batchNumber":"CW-7","notes":"roll"}
+  ✔ RM-2 adding a material: available quantity defaults to the purchase quantity (1321.7493ms)
+      · notes=checked; costPrice 333.333333 -> 333.333333
+  ✔ RM-3 editing a material's notes leaves its weighted average cost untouched (1339.0696ms)
+  ✔ RM-4 deleting a material (1119.9627ms)
+      · 4 kg of Resin recorded as used on Mar 5. 6 kg remaining. Stock movement only — no expense posted.
+      · {"id":"USE-1001","date":"2026-03-05","materialId":401,"materialName":"Resin","qtyUsed":4,"remainingQty":6,"user":"Test Owner","notes":"batch 7","consumedValue":400}
+  ✔ RM-5 recording usage lowers the available stock and logs who used it — with no expense posted (1137.2667ms)
+      · 11 kg -> "Only 10 kg of Resin is available."; 0 -> "Enter a quantity used greater than 0."
+  ✔ RM-6 using more than is available, or nothing, is refused (887.4581ms)
+      · Usage record removed. 4 kg returned to Resin.
+  ✔ RM-7 deleting a usage record returns the quantity to stock (1130.2048ms)
+  ✔ RM-8 usage history can be searched and limited to a date range (677.205ms)
+      · empty-list message shown: true
+  ✔ RM-9 with no raw materials the list says so (922.3734ms)
+✔ Raw Materials (9144.1745ms)
+      · Purchase order PO-4001 recorded — Rs. 600 paid from Cash Account. Raw material stock updated; this is an asset purchase, so your profit is unaffected.
+      · Resin: {"id":401,"name":"Resin","category":"Plastics","supplier":"Paper Mills Ltd","unit":"kg","purchaseQty":15,"availableQty":15,"costPrice":106.666667,"lastPurchaseCost":120,"purchaseDate":"2026-01-01","batchNumber":"B1","notes":""}
+▶ Purchases
+  ✔ PO-1 a paid purchase adds raw material stock at a weighted average cost and pays from cash — profit untouched (2144.4161ms)
+      · Purchase order PO-4001 recorded on credit — Rs. 600 now shows as a payable. Raw material stock updated; profit unaffected.
+  ✔ PO-2 a purchase on credit becomes a payable: stock arrives, no cash moves (2118.2295ms)
+      · {"id":"TXN-8822","date":"2026-11-10","desc":"Supplier payment — Paper Mills Ltd (PO-4001)","type":"Expense","category":"Supplier Payment","amount":600,"account":"CASH-MAIN","kind":"ap_settlement"}
+  ✔ PO-3 paying a supplier later settles the payable without touching profit (2077.9776ms)
+      · Purchase order PO-4001 recorded — Rs. 600 paid from Bank Account, after moving Rs. 600 across from Cash Account. No account is left below zero and your profit is unaffected.
+  ✔ PO-4 paying from an account that is short tops it up from another account first (2101.607ms)
+  ✔ PO-5 several materials in one order; each gets its own weighted average (2104.8335ms)
+      · Purchase order PO-4001 deleted — stock, cash and supplier totals all reversed.
+      · Resin after delete: available=10, purchased=10, cost=100.000001
+  ✔ PO-6 deleting a purchase reverses the stock, average cost, cash and supplier total (2594.4218ms)
+  ✔ PO-7 search by PO number or supplier (637.7395ms)
+      · empty-list message shown: true
+  ✔ PO-8 with no purchase orders the list says so (893.5117ms)
+  ✔ PO-9 'New Purchase Order' is disabled while there are no suppliers (608.2375ms)
+✔ Purchases (15281.7537ms)
+      · Delivery run DR-1001 started — stock taken out and deducted from inventory.
+▶ Delivery Stock
+  ✔ DEL-1 starting a run takes the stock out of inventory (2122.1183ms)
+  ✔ DEL-2 taking more than is in stock is refused (1231.1511ms)
+      · Delivery run DR-1001 closed — Rs. 3,500 in sales, Rs. 1,500 net profit. Remaining stock added back.
+  ✔ DEL-3 closing a run returns the unsold stock and books the sale and its cost (2119.1882ms)
+      · sales=3400 cost=2000 gross=1400 net=1250
+  ✔ DEL-4 a product sold at several prices, plus the day's expense (2127.4953ms)
+      · Delivery run DR-1001 closed — Rs. 4,500 in sales (Rs. 1,000 on credit from 1 shop). Credit bills added to Sales Orders.
+      · credit order: {"id":"SO-1043","invoice":"INV-2462","customer":"Corner Shop","items":1,"lineItems":[{"productId":101,"name":"Alpha Printer","qty":1,"price":1000,"unit":"pc"}],"amount":1000,"tax":0,"status":"Delivered","payment":"Pending","date":"2026-11-10","channel":"Delivery Credit","amountPaid":0,"payments":[],"isCredit":true,"fromDelivery":"DR-1001","note":"077 555"}
+  ✔ DEL-5 a credit bill becomes an unpaid sales order; only the cash part reaches the cash account (2101.8583ms)
+  ✔ DEL-6 credit bills are checked: shop name required, credit can't exceed what was sold; can't sell more than taken (1023.1581ms)
+      · {"id":"TXN-8825","date":"2026-11-10","desc":"Receipt from Corner Shop — INV-2462","type":"Income","category":"Receivable Collection","amount":1000,"account":"CASH-MAIN","kind":"ar_collection"}
+  ✔ DEL-7 a delivery credit bill is collected in Sales Orders as a receipt, not as new income (2923.3421ms)
+      · Delivery run DR-1001 moved to Jan 15 — its Cash Book, Ledger and P&L entries were updated to match.
+  ✔ DEL-8 correcting a closed run's sale date moves its ledger lines and credit bills too (2892.4182ms)
+  ✔ DEL-9 deleting a run that is still out puts all its stock back (1120.4722ms)
+      · Delete delivery run DR-1001? This will reverse its stock movements and remove its recorded sale and delete its 1 credit bill(s) from Sales Orders. This cannot be undone.
+      · stock after deleting the closed run: Alpha Printer 10, Beta Toner 3, Gamma Paper 0 (before the run: 10, 3, 0)
+  ✔ DEL-10 deleting a closed run reverses its stock movements, sale, ledger lines and credit bills (2596.6855ms)
+      · Delivery Run DR-1001 Date Taken Nov 10 Status Completed Date Closed Nov 10 Items Product Taken Sold Remaining Amount Alpha Printer 4 4 0 Rs. 4,000 4 pc at Rs. 1,000 each Rs. 4,000 Beta Toner 2 2 0 Rs. 500 2 pc at Rs. 250 each Rs. 500 Total Sales Rs. 4,500 Cost of Goods Sold Rs. 2,600 Daily Expense R
+  ✔ DEL-11 search by run number; the detail view shows the run's figures (2437.4979ms)
+      · empty-list message shown: true
+  ✔ DEL-12 with no runs the list says so; 'New Delivery Run' needs stock (628.7939ms)
+✔ Delivery Stock (23325.272ms)
+▶ Cash & Bank
+  ✔ CASH-1 each account's opening balance, money in/out and balance; the total (888.4943ms)
+      · Rs. 1,200 transferred to Bank Account. Profit is unaffected — this is only a movement of your own cash.
+  ✔ CASH-2 a transfer between accounts moves money without touching profit (2175.6503ms)
+  ✔ CASH-3 a transfer needs two different accounts (640.5369ms)
+      · Other Income 75 → revenue | Loan Received 500 → loan_in | Owner Capital 2000 → capital_in
+  ✔ CASH-4 money in: owner's capital and loans stay out of profit; other income counts (3689.2088ms)
+  ✔ CASH-5 money out: drawings are equity; supplier and loan payments settle what is owed (3805.2162ms)
+      · {"id":"ACC-MWAZRO0O","name":"Mobile Wallet","type":"Mobile Wallet","opening":250,"purpose":"general","system":false,"notes":"eZ cash"}
+  ✔ CASH-6 a new account starts with its opening balance (2155.0645ms)
+      · {"id":"BANK-MAIN","name":"Bank — BOC","type":"Bank","opening":100,"purpose":"general","system":true,"notes":""}
+  ✔ CASH-7 editing an account saves only the account's own details (1483.7234ms)
+      · built-in -> "Built-in accounts cannot be deleted, because other modules post to them."; used -> "Petty Cash has 1 transaction(s) posted to it and cannot be deleted. Set its opening balance to 0 instead."
+  ✔ CASH-8 built-in accounts and accounts with transactions can't be deleted; unused ones can (2153.7674ms)
+      · Rs. 400 moved from Cash Account into Bank Account. Both balances now match your real cash.
+  ✔ CASH-9 an account paid out of without funds can be topped up from another account in one click (1158.1533ms)
+      · cash_book.csv [["Date","Account","Description","Category","Treatment","Money In","Money Out"],["Feb 10","Cash Account","Stock","Stock & Raw Material Purchase","Asset purchase — Statement of Financial Position","","300"],["Feb 5","Bank Account","Rent","Rent","Profit or Loss","","150"],["Feb 1","Cash Account","Sale","Sales","Profit or Loss","1000",""]]
+  ✔ CASH-10 the cash book: filters by account, kind and dates, and exports to CSV (1102.2568ms)
+✔ Cash & Bank (19872.389ms)
+      · Expense of Rs. 150.75 recorded. {"id":"TXN-8822","date":"2026-02-20","desc":"Electricity","type":"Expense","category":"Utilities","amount":150.75,"account":"BANK-MAIN","kind":"opex"}
+▶ Accounting
+  ✔ ACC-1 a manual expense goes to the Profit or Loss statement and out of the chosen account (2320.603ms)
+  ✔ ACC-2 owner's capital entered as income is shown as equity, not profit (2362.868ms)
+      · {"Total Income (P&L)":"Rs. 1,420","Total Expenses (P&L)":"Rs. 750","Net Profit (all time)":"Rs. 670","Cash & Bank":"Rs. 6,340","Accounts Receivable":"Rs. 400","Accounts Payable":"Rs. 450"}
+  ✔ ACC-3 the ledger overview: P&L totals, cash, receivables and payables (709.3499ms)
+  ✔ ACC-4 ledger entries: treatment badges, income/expense filter and delete (1439.606ms)
+      · {"Revenue":"Rs. 1,400","Gross Profit":"Rs. 800","Operating Expenses":"Rs. 150","Net Profit":"Rs. 670"}
+  ✔ ACC-5 the Profit or Loss statement, with the items deliberately kept out of profit (1305.5398ms)
+  ✔ ACC-6 the statement can be limited to a date range, or a preset (1199.9322ms)
+      · profit_or_loss_statement.csv 30 rows
+  ✔ ACC-7 the Profit or Loss statement exports to CSV and opens as a printable page (1320.1926ms)
+      · {"Total Assets":"Rs. 14,080","Total Liabilities":"Rs. 450","Net Assets / Equity":"Rs. 13,630","Retained Earnings":"Rs. 670"}
+  ✔ ACC-8 the Statement of Financial Position balances and exports (975.4195ms)
+✔ Accounting (11634.4139ms)
+      · profit_or_loss_statement.csv: 30 rows; first data row ["REVENUE",""]
+▶ Reports
+  ✔ REP Profit or Loss Statement: CSV export (1316.844ms)
+      · statement_of_financial_position.csv: 33 rows; first data row ["ASSETS",""]
+  ✔ REP Statement of Financial Position: CSV export (727.0719ms)
+      · cash_book.csv: 11 rows; first data row ["Feb 6","Bank Account","Paid supplier","Supplier Payment","Payable settled — no new expense","","80"]
+  ✔ REP Cash Book: CSV export (1051.6673ms)
+      · cash_account_balances.csv: 4 rows; first data row ["Cash Account","Cash","1000","1150","500","1650"]
+  ✔ REP Cash Account Balances: CSV export (2307.5545ms)
+      · supplier_payables.csv: 3 rows; first data row ["PO-4001","Paper Mills Ltd","Feb 8","450","0","450"]
+  ✔ REP Supplier Payables: CSV export (1162.3779ms)
+      · sales_by_product.csv: 2 rows; first data row ["Beta Toner","2","400"]
+  ✔ REP Sales by Product: CSV export (1014.0166ms)
+      · stock_valuation.csv: 4 rows; first data row ["Alpha Printer","ALP-1","Printers","600","1000","10","6000"]
+  ✔ REP Stock Valuation: CSV export (997.5412ms)
+      · customer_statement.csv: 3 rows; first data row ["Acme Traders","Wholesale","0","0","0"]
+  ✔ REP Customer Statement: CSV export (1168.4308ms)
+      · supplier_purchases.csv: 3 rows; first data row ["Paper Mills Ltd","Paper","0","—","Active"]
+  ✔ REP Supplier Purchases: CSV export (2277.3661ms)
+      · tax_summary.csv: 4 rows; first data row ["Output Tax Collected (Sales)","36.36"]
+  ✔ REP Tax Summary: CSV export (1417.508ms)
+      · raw_material_purchases.csv: 2 rows; first data row ["PO-4001","Paper Mills Ltd","Feb 8","Resin","3","150","450"]
+  ✔ REP Raw Material Purchases: CSV export (1056.4665ms)
+      · raw_material_usage.csv: 2 rows; first data row ["Feb 9","Resin","2","8","Ann","mould"]
+  ✔ REP Raw Material Usage: CSV export (1055.4008ms)
+      · remaining_raw_materials.csv: 3 rows; first data row ["Resin","Plastics","Paper Mills Ltd","kg","10","100","100","1000"]
+  ✔ REP Remaining Raw Materials: CSV export (962.8273ms)
+      · delivery_profit_report.csv: 2 rows; first data row ["DR-1001","Feb 10","1900","1200","100","700","600"]
+  ✔ REP Delivery Profit Report: CSV export (736.9196ms)
+      · delivery_item_prices_report.csv: 3 rows; first data row ["DR-1001","Feb 10","Alpha Printer","3","1","1000","1000","1"]
+  ✔ REP Delivery Item Sales by Price: CSV export (725.739ms)
+      · daily_expense_report.csv: 3 rows; first data row ["DR-1001","Feb 10","100"]
+  ✔ REP Daily Expense Report: CSV export (914.616ms)
+      · sales by product from Mar 1: 0 rows
+  ✔ REP-17 a date range limits the dated reports (sales by product) (986.8171ms)
+  ✔ REP-18 every report also opens as a printable page (903.6373ms)
+✔ Reports (20819.9133ms)
+      · {"Income (All Time)":"Rs. 1,420","Net Profit (All Time)":"Rs. 670","Expenses (All Time)":"Rs. 750","Orders (All Time)":"1","Completed (All Time)":"1","Stock Value (Current)":"Rs. 6,300","Cash & Bank (Current)":"Rs. 6,340","Purchases (All Time, not an expense)":"Rs. 300","Receivable (Current)":"Rs. 400","Payable (Current)":"Rs. 450","Low Stock Items (Current)":"1","Total Raw Materials Value":"Rs. 1,040","Raw Material Stock":"11","Total Daily Expenses":"Rs. 100"}
+▶ Dashboard
+  ✔ DASH-1 all-time figures (1991.602ms)
+      · this month: Rs. 0; this year: Rs. 1,420
+  ✔ DASH-2 the period selector limits income, profit and orders to that period (3289.9075ms)
+      · Jan 5 – Jan 12: {"Income":"Rs. 1,020","Net Profit":"Rs. 270","Expenses":"Rs. 750","Orders":"0"}
+  ✔ DASH-3 picking dates on the calendar shows that range's figures (2397.8882ms)
+✔ Dashboard (7679.7193ms)
+      · Settings saved. {"businessName":"Hashil Traders","taxRate":"12.5","openingCapital":"1000","currency":"USD ($)","notifLowStock":true,"notifOverdue":true,"notifDaily":false}
+▶ Settings
+  ✔ SET-1 the business profile is saved; the currency symbol changes everywhere (1799.9121ms)
+  ✔ SET-2 notification preferences are saved (1263.3917ms)
+      · Accounting Ledger cleared — all other data was left untouched.
+  ✔ SET-3 clearing one module empties only that module (2181.4652ms)
+      · Couldn't restore that file — it doesn't look like a valid LEARNEX backup.
+  ✔ SET-4 restoring a file that isn't a backup changes nothing and says why (1292.0359ms)
+      · accountant: {"tabs":["Data & Backup"],"cards":["Data & Backup","Database","Download Backup"]}
+      · administrator: {"tabs":["Business Profile","Users & Roles","Notifications","Data & Backup","Activity Log"],"cards":["Data & Backup","Database","Download Backup","Restore from Backup"]}
+  ✔ SET-5 each role only sees the settings it may use (3564.6617ms)
+✔ Settings (10800.3516ms)
+      · User updated. {"name":"Nimal S. Silva","email":"nimal@shop.lk","roles":["Inventory Manager"]}
+▶ Users & Roles screen
+  ✔ USR-1 editing a staff member's name, email and roles (3185.5761ms)
+      · one-time password xxxx-xxxx-xxxx -> sign-in 200; must change: true
+  ✔ USR-2 resetting a password shows a one-time password that works once (4117.7073ms)
+      · Nimal Silva's account disabled. -> sign-in 403; Nimal Silva's account enabled. -> sign-in 200
+  ✔ USR-3 disabling and re-enabling an account (3766.1573ms)
+      · Nimal Silva was signed out of 1 session(s).; staff's next request -> 401
+  ✔ USR-4 signing a staff member out of every device (2920.8345ms)
+  ✔ USR-5 you can't change your own roles, reset your own password or disable yourself from this screen (2823.2922ms)
+      · Role saved. It applies immediately. {"id":6,"key":"custom-c048a06e3ee9","name":"Stock Checker","description":"Counts stock","isSystem":false,"permissions":["inventory.manage","suppliers.manage"],"userCount":0}
+  ✔ ROLE-1 creating a role with chosen permissions (2914.5385ms)
+  ✔ ROLE-2 editing a role's permissions applies to everyone who has it (3717.0919ms)
+      · Role "Spare Role" deleted.
+  ✔ ROLE-3 a role in use can't be deleted; an unused one can (2998.5964ms)
+  ✔ ROLE-4 two roles can't share a name (any upper/lower case) (3840.0972ms)
+  ✔ ROLE-5 the Owner role can do everything and can't be edited or deleted (3130.4821ms)
+✔ Users & Roles screen (33415.5865ms)
+      · 11/10/2026, 11:27:58 PM logger authChanged their password
+      · 11/10/2026, 11:27:57 PM logger authSigned in
+      · 11/10/2026, 11:27:57 PM owner userAdded user “logger” (Sales & POS)
+      · 11/10/2026, 11:27:56 PM owner authCreated the owner account
+▶ Activity Log screen
+  ✔ LOG-1 what happened, by whom, newest first (22739.5323ms)
+      · staff accounts: 11/10/2026, 11:27:57 PM owner userAdded user “logger” (Sales & POS)
+      · by logger: 11/10/2026, 11:27:58 PM logger authChanged their password | 11/10/2026, 11:27:57 PM logger authSigned in
+  ✔ LOG-2 filtering by kind of activity and by username (3773.4637ms)
+      · first page: 100 entries; after "Show older entries": 124
+  ✔ LOG-3 older entries load 100 at a time (1819.904ms)
+✔ Activity Log screen (30404.5262ms)
+▶ App shell
+  ✔ SHELL-1 dark mode can be switched on and off (1617.422ms)
+      · menu text after collapsing: ""
+  ✔ SHELL-2 the menu can be collapsed to icons (1154.5587ms)
+      · learnex_backup_2026-11-10_2328.html products, customers, suppliers, salesOrders, purchaseOrders, rawMaterials, rawMaterialUsage, deliveryRuns, ledger, cashAccounts, settings, users
+  ✔ SHELL-3 the header Backup button downloads everything in one file (1073.5817ms)
+      · Password changed. Any other devices you were signed in on have been signed out. | old password -> 401, new password -> 200
+  ✔ SHELL-4 changing your own password from the account menu (3235.2052ms)
+  ✔ SHELL-5 an account whose roles open no screen is told it has no access yet (1938.9551ms)
+✔ App shell (13652.7347ms)
+      · {"ppe":2500,"nonCurrentAssets":2500,"mainCash":1650,"bank":4690,"cash":6340,"receivables":400,"finishedGoods":5100,"rawMaterials":1040,"onRuns":1200,"currentAssets":14080,"loans":2500,"nonCurrentLiabilities":2500,"payables":450,"currentLiabilities":450,"openingCapital":1000,"introduced":5000,"drawings":-200,"retained":670,"preSystem":7160,"equity":13630}
+▶ the statements
+  ✔ ST-1 Statement of Financial Position: non-current and current items, and it balances (1764.7487ms)
+  ✔ ST-2 Profit or Loss: sales returns come off revenue; equipment and loans stay out of profit (973.5673ms)
+      · {"customers":2150,"other":20,"refunds":-1100,"stock":-300,"suppliers":-80,"expenses":-150,"operating":540,"equipment":-2500,"investing":-2500,"capital":5000,"drawings":-200,"loansIn":3000,"loansOut":-500,"financing":7300,"change":5340,"start":1000,"end":6340,"cashAccount":1650,"bank":4690,"profit":670,"receivables":-350,"inventory":220,"fromProfit":540}
+  ✔ ST-3 Statement of Cash Flows: operating, investing and financing, closing on the cash balances (938.6653ms)
+  ✔ ST-4 Cash Flows: a period opens with the cash the day before, and periods join up (1072.3881ms)
+  ✔ ST-5 Statement of Changes in Equity: capital, retained earnings and the opening-balance line (937.7687ms)
+      · {"profit":670,"sofp":{"cash":6340,"equity":13630,"retained":670},"cf":{"closing":6340,"profit":670},"eq":{"profit":670,"closing":13630}}
+  ✔ ST-6 the statements agree with each other (937.9973ms)
+  ✔ ST-7 each statement exports to CSV and opens as a printable page (1599.5415ms)
+      · January cash flow: {"Statement of Cash Flows":"Amount","CASH FLOWS FROM OPERATING ACTIVITIES":"","Cash received from customers":"1000","Other income received":"20","Refunds paid to customers":"0","Paid for stock and raw materials":"0","Supplier bills settled":"0","Operating expenses paid":"-150","Net cash from operating activities":"870","CASH FLOWS FROM INVESTING ACTIVITIES":"","Purchase of property, plant and equipment":"0","Net cash used in investing activities":"0","CASH FLOWS FROM FINANCING ACTIVITIES":"","Owner's capital introduced":"0","Owner's drawings":"0","Loans received":"0","Loans repaid":"0","Net cash from financing activities":"0","NET INCREASE / (DECREASE) IN CASH":"870","Cash at the start of the period":"1000","CASH AT THE END OF THE PERIOD":"1870","Cash Account":"2000","Bank Account":"-130","RECONCILIATION OF NET PROFIT TO CASH FROM OPERATIONS":"","Net profit for the period":"270","Decrease / (increase) in trade receivables":"0","Decrease / (increase) in inventory, net of trade payables":"600","Net cash from operations (reconciled)":"870"}
+  ✔ ST-8 the Reports screen offers the new statements, with the same figures and a date range (5059.9548ms)
+✔ the statements (14260.9092ms)
+▶ other starting points
+  ✔ ST-9 a brand-new business: every statement is nil, with no errors (1043.2403ms)
+      · demo data: equity 1351158.5, cash -42850
+  ✔ ST-10 the built-in demo data (older-style ledger lines) agrees on every statement (1664.6272ms)
+✔ other starting points (2708.2487ms)
+▶ a month in the life of the shop
+  ✔ J01 a cash sale at the till: 2 printers, 2,000 + 10% tax = 2,200 (1580.5495ms)
+  ✔ J02 a card sale to a customer lands in the bank: 1 toner, 250 + 25 tax = 275 (623.5969ms)
+  ✔ J03 an order on credit: 1 printer + 1 toner = 1,250 + 125 tax = 1,375, not yet paid (896.1722ms)
+  ✔ J04 the customer pays 375 of it: cash up, receivable down, profit untouched (858.2689ms)
+  ✔ J05 the customer returns the printer, which goes back on the shelf (1617.9385ms)
+  ✔ J06 a printer from the cash sale comes back damaged: refunded, not restocked, written off (1745.0022ms)
+  ✔ J07 raw materials bought for cash: 5 resin at 120 = 600 (1454.1712ms)
+  ✔ J08 raw materials bought on credit: 5 resin at 130 = 650 owed to the supplier (1611.8171ms)
+  ✔ J09 the supplier is paid: cash down, the payable cleared, profit untouched (1574.8044ms)
+  ✔ J10 a delivery run goes out with 3 printers: the stock is still the shop's, on the van (1609.7841ms)
+  ✔ J11 the run is closed: 2 sold (1 of them on credit), 1 back, 150 of expenses (1601.9418ms)
+  ✔ J12 the corner shop pays its credit bill: cash in, receivable cleared, no new income (1598.6651ms)
+  ✔ J13 rent of 300 is paid from cash: an expense (1585.4236ms)
+  ✔ J14 the owner puts 2,000 into the bank: capital, not income (1613.6876ms)
+  ✔ J15 the owner draws 500 in cash: equity down, not an expense (1603.2055ms)
+  ✔ J16 a loan of 3,000 is received: a liability, not income (1598.6806ms)
+  ✔ J17 equipment for 2,500 is bought from the bank: cash becomes a non-current asset (1591.2073ms)
+  ✔ J18 500 of the loan is repaid: cash and the liability both down (1611.917ms)
+  ✔ J19 1,000 moves from the cash drawer to the bank: nothing changes but where the money is (1593.2322ms)
+      · {"Fixed Asset Purchase":"fixed_asset","Loan Received":"loan_in","Loan Repayment":"loan_out","Owner Capital":"capital_in","Owner Drawings":"capital_out"}
+  ✔ J20 everything was saved the way the statements read it (15.5292ms)
+  ✔ J21 Profit or Loss at month end (87.828ms)
+      · {"ppe":2500,"cash":8450,"receivables":0,"finishedGoods":3700,"rawMaterials":2290,"onRuns":0,"loans":2500,"payables":0,"capital":1500,"retained":600,"openingBalance":12340,"totalAssets":16940,"totalLiabilities":2500,"equity":14440}
+  ✔ J22 Statement of Financial Position at month end (78.3317ms)
+      · {"customers":4850,"refunds":-1200,"stock":-600,"suppliers":-650,"expenses":-450,"capital":2000,"drawings":-500,"loansIn":3000,"loansOut":-500,"start":5000,"end":8450,"cashAccount":5175,"bank":3275,"profit":600,"receivables":0,"inventory":1350,"fromProfit":1950}
+  ✔ J23 Statement of Cash Flows at month end (94.3126ms)
+  ✔ J24 Statement of Changes in Equity at month end (57.0222ms)
+      · console: no errors or warnings
+  ✔ J25 today's cash flow is the whole story (everything happened today); the Reports screen agrees (266.6748ms)
+  ✔ J26 no errors or warnings in the browser console during the whole month (0.4387ms)
+✔ a month in the life of the shop (29245.6771ms)
+      · {"page":"nosniff","api":"nosniff"}
+▶ A. Headers, transport and exposure
+  ✔ SEC-1 [A05] pages and API answers forbid MIME sniffing (X-Content-Type-Options: nosniff) (1.8857ms)
+      · X-Frame-Options=DENY; CSP frame-ancestors=true; app rendered inside attacker's iframe: false
+      · Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-MDUxOTU5NWUtYzYzMy00NGFhLWE5NjUtNGU0ODM0MDNmYjM0' 'strict-dynamic'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+      · Referrer-Policy: same-origin
+      · Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+      · X-Powered-By: (none)
+  ✔ SEC-2 [A05] the app cannot be framed by another website (clickjacking) — header and real browser (2871.8038ms)
+  ✔ SEC-3 [A05] a Content-Security-Policy limits where scripts, frames and objects can come from (0.4489ms)
+  ✔ SEC-4 [A05] Referrer-Policy is set (0.2645ms)
+  ✔ SEC-5 [A05] Permissions-Policy is set (camera, microphone, geolocation off) (0.1942ms)
+  ✔ SEC-6 [A05] the server does not announce its framework (no X-Powered-By) (0.1374ms)
+      · Strict-Transport-Security (request marked as HTTPS): max-age=31536000
+  ✔ SEC-7 [A02] HTTPS answers carry Strict-Transport-Security (7.8313ms)
+      · plain  : learnex_session=<token>; Path=/; Expires=Tue, 17 Nov 2026 17:59:39 GMT; HttpOnly; SameSite=lax
+      · https  : __Host-learnex_session=<token>; Path=/; Expires=Tue, 17 Nov 2026 17:59:39 GMT; Secure; HttpOnly; SameSite=lax
+  ✔ SEC-8 [A02/A07] the session cookie is HttpOnly, SameSite, host-only; over HTTPS it is Secure and __Host- prefixed (493.3857ms)
+      · redirect: /..\.env => 308 → /.env ; 404
+      · redirect: /_next/static/chunks/..\..\..\.env => 308 → /.env ; 404
+      · 38 paths probed (redirects followed); 5xx on: none
+      · 14 client files scanned for 2 secret values, MySQL URLs and source maps
+  ✔ SEC-9 [A05] source, secrets, backups and dependency files are not downloadable (incl. Windows/encoded path traversal) (238.8096ms)
+  ✔ SEC-10 [A05] no source maps and no secret values in the browser bundle (.next/static) (9.3741ms)
+      · {"simple":null,"preflight":null,"credentials":null} preflight status 204
+  ✔ SEC-11 [A05] CORS: another website gets no permission to read the API (simple and pre-flight requests) (5.2524ms)
+  ✔ SEC-12 [A05] unsupported HTTP methods are refused cleanly; TRACE is not echoed (69.111ms)
+      · 0 leak(s): none
+  ✔ SEC-13a [A05/A09] hostile sign-in input is answered 400/401 — never a database error (and is still logged) (12.1831ms)
+      · HTTP 500: {"error":"Database error: the database server can't be reached. Check that MySQL is running."}
+  ✔ SEC-13b [A05] when the database is down, anonymous visitors are not told its address and port (39.0278ms)
+✔ A. Headers, transport and exposure (9886.4543ms)
+      · burst of 30 wrong guesses -> {"401":5,"429":25}; failed_login_count in DB = 5; locked = true
+      · the right password sent after 29 wrong ones -> 429 (refused)
+▶ B. Authentication
+  ✔ SEC-14 [A07] the 5-attempt lockout holds when guesses arrive in parallel (5690.4388ms)
+      · 60 rapid sign-ins from one client -> {"401":10,"429":50} in 1010 ms (only 10 were actually checked)
+  ✔ SEC-14b [A04/A07] password spraying is slowed: 60 rapid sign-ins for 60 different usernames are mostly refused (1010.844ms)
+      · HTTP 413; longest attempted username stored in the log: 0 characters
+  ✔ SEC-14c [A04/A09] an anonymous client cannot park large amounts of its own data in the activity log via failed sign-ins (5.2133ms)
+      · median unknown user 235 ms, known user 232 ms (difference 3 ms)
+  ✔ SEC-15 [A07] sign-in takes the same time for unknown and known usernames (no timing oracle) (2816.2994ms)
+      · real account    -> 401 401 401 401 401 429 429
+      · unknown name    -> 401 401 401 401 401 429 429
+  ✔ SEC-16 [A07] a real account and an unknown name give the same answers attempt after attempt (no username enumeration) (4285.9483ms)
+      · before login signed-in=false; token replaced=true; planted token afterwards signed-in=false
+  ✔ SEC-17 [A07] session fixation: an attacker-chosen cookie is never adopted; sign-in issues a new token (291.6254ms)
+      · 12 tokens, lengths 43, sample kqRyOU…, distinct 12
+  ✔ SEC-18 [A02] session tokens are long, random and unique (≥ 256 bits) (3100.9286ms)
+      · accepted 0 of 8: none
+  ✔ SEC-19 [A07] very common passwords are refused (2726.032ms)
+      · 100 KB password -> 413 in 3 ms; 8 MB body -> 413 in 12 ms
+  ✔ SEC-20 [A04/A05] the sign-in endpoint refuses very large request bodies instead of processing them (14.453ms)
+✔ B. Authentication (19942.6994ms)
+      · 104 role/endpoint checks, 0 wrong
+▶ C. Access control
+  ✔ SEC-21 [A01] role × endpoint matrix: every role can reach exactly what it should, anonymous reaches nothing (2297.3795ms)
+      · 0 endpoint(s) not blocked; /me -> 200 mustChangePassword=true; logout -> 200
+  ✔ SEC-22 [A01] a session that must still change its one-time password reaches nothing but sign-out and the password change (512.889ms)
+      · Sales & POS role: replace ledger -> 403; replace products -> 403; delete all 12 ledger entries at once -> 403
+      · rows: ledger 12 -> 12, products 3 -> 3
+  ✔ SEC-23 [A01] a role without 'Clear & factory reset' cannot wipe a whole module through /sync (replace, or deleting every record at once) (75.036ms)
+      · 10 escalation attempts, 0 not refused; same-level grant -> 200
+  ✔ SEC-24 [A01] nobody can give themselves or anyone else more power than they hold (2570.718ms)
+      · 4 takeover attempts, 0 not refused; same-level reset -> 200
+  ✔ SEC-24b [A01] a user manager cannot reset, disable or edit an account that holds permissions they lack (account takeover) (1947.708ms)
+      · chosen password works: false; account owner: false; forced change: true; PATCH 200; row {"status":"active","mcp":true,"f":0,"locked_until":null}
+  ✔ SEC-25 [A01] extra fields in requests cannot set passwords, owner status or counters (mass assignment) (1067.5453ms)
+      · sync of a -500,000 sale, a -1e12 expense dated 2099 and a product with price -1 / stock -999 -> 400; product now price=1000 stock=10
+  ✔ SEC-26 [A01/A04] the server rejects impossible business data (negative sales, absurd amounts) from a low-privilege role (64.6849ms)
+✔ C. Access control (9531.4788ms)
+      · 162 hostile requests across 18 payloads; slowest 270 ms; users 18 -> 36 (+18 created); tables 29 -> 29
+▶ D. Injection and XSS
+  ✔ SEC-27 [A03] SQL injection: hostile text in every input is stored as plain data and never runs as SQL (9662.0021ms)
+      · 29 views inspected (screens, tabs, dialog, invoice and report print windows); hostile text visible as plain text in 24; dialogs shown: 0
+      · detector self-check with raw HTML insertion: {"fired":0,"injected":3,"blockedByCsp":2}
+  ✔ SEC-28 [A03] stored XSS: hostile text in every module, account name, role name and log entry never becomes script or markup (16859.0277ms)
+      · links in the DOM: /api/learnex/attachment?store=salesOrder | /api/learnex/attachment?store=salesOrder; pages: 2; script ran: false
+  ✔ SEC-29 [A03] attachment links (javascript: / data:text/html) never execute when 'View slip' is clicked (2821.6895ms)
+      · 5 formula payloads exported; cells that Excel would execute: 0
+  ✔ SEC-30 [A03] CSV exports neutralise spreadsheet formulas (=, +, -, @) typed into product names (1197.8861ms)
+      · statuses 401,200,200,200; PATCH {} -> 200; disabled accounts: 0; cashier isOwner=false
+  ✔ SEC-31 [A03] prototype-pollution style keys (__proto__, constructor) change no privileges and break nothing (594.0215ms)
+      · 230 malformed requests, 0 server error(s); server still answering: 200
+  ✔ SEC-32 [A03/A05] malformed and wrongly-typed bodies on every write endpoint never cause a server error (5369.8435ms)
+✔ D. Injection and XSS (36505.0749ms)
+      · 56 forged requests, 0 accepted
+▶ E. Cross-site attacks
+  ✔ SEC-33 [A01] API: every state-changing endpoint refuses a foreign Origin (and Origin: null) (111.6527ms)
+      · cross-site fetch results: {"readData":{"blocked":"Failed to fetch"},"readMe":{"blocked":"Failed to fetch"},"postResetText":{"blocked":"Failed to fetch"},"postResetJson":{"blocked":"Failed to fetch"}}
+      · cross-site form POST answer: {"error":"Cross-site request refused.","code":"cross_site"}; products 3 -> 3
+  ✔ SEC-34 [A01] real browser: another website cannot make the signed-in owner's browser reset data or read the API (1059.4081ms)
+✔ E. Cross-site attacks (1171.3429ms)
+      · 271 entries; missing actions: none; lock logged: true; data.save actor: sec-cashier2; write verbs on /api/audit -> 405,405,405,405
+      · production packages: {"info":0,"low":0,"moderate":0,"high":0,"critical":0,"total":0}; high/critical: 
+      · next 16.4.6; platform win32; Cache Components enabled: false; patched in 16.3.3 (GHSA-p293-qw3h-jr36)
+▶ F. Logging
+  ✔ SEC-35 [A09] security-relevant events are logged with the real actor, and the log cannot be altered through the API (4153.4651ms)
+✔ F. Logging (4153.7154ms)
+▶ G. Components and platform
+  ✔ SEC-36 [A06] production dependencies have no known high or critical vulnerabilities (npm audit) (1243.2444ms)
+  ✔ SEC-37 [A06] Next.js is not in the range of CVE-2026-75604 (unauthenticated remote code execution on Windows-hosted servers) (1.3498ms)
+  ✔ SEC-38 [A06] the package lockfile pins every dependency by integrity hash from the npm registry (2.4741ms)
+      · remote targets reached: 0; endpoint answers a local image with 400 (so it is reachable)
+  ✔ SEC-39 [A10] the image optimiser endpoint cannot be used to fetch other servers (SSRF) (16.0112ms)
+✔ G. Components and platform (1263.4301ms)
+▶ optimistic locking (/data versions, /sync base and creates)
+  ✔ CONC-1 /data gives every record a version and a save returns the new one (316.5796ms)
+      · 409 Products & Inventory: 101 was changed by someone else. Reload the page to get the latest data. Nothing was saved.
+  ✔ CONC-2 saving a record somebody else changed meanwhile is refused and changes nothing (66.8237ms)
+  ✔ CONC-3 after a successful save the next save from the same person is accepted (56.8355ms)
+      · statuses 200 409
+  ✔ CONC-4 two people selling the same stock at the same moment: one sale is saved, the other refused (62.6702ms)
+  ✔ CONC-5 a new record whose id somebody else just used is refused instead of overwriting theirs (44.2663ms)
+  ✔ CONC-6 editing a record somebody else deleted does not bring it back (49.8159ms)
+  ✔ CONC-7 one refused change rolls back the whole request, other modules included (66.5433ms)
+  ✔ CONC-8 re-ordering the list alone does not change any record's version (44.0967ms)
+  ✔ CONC-9 a request without versions (an older browser tab) is still accepted, as before (48.3044ms)
+  ✔ CONC-10 malformed base / creates are a 400, not a crash (39.1873ms)
+✔ optimistic locking (/data versions, /sync base and creates) (1383.8395ms)
+      · stored: stock 40, price 250; dialog: Products & Inventory: 102 was changed by someone else. 
+▶ the page in the browser
+  ✔ CONC-11 saving over somebody else's change shows 'Out of date' and keeps their change (2151.7369ms)
+  ✔ CONC-12 editing one record twice in a row from one page never conflicts with itself (2475.7237ms)
+✔ the page in the browser (4627.8134ms)
+▶ health check
+  ✔ CONC-13 /api/health answers 200 {ok:true} with the database up, with nothing else in it (7.3768ms)
+  ✔ CONC-14 /api/health answers 503 {ok:false} (no details) when the database can't be reached (12.2939ms)
+✔ health check (19.9358ms)
+(node:17944) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///d:/Hashil/hashil/lib/auth/totp.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to \\?\d:\Hashil\hashil\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+      · 4 old failures + 1 new one -> failed_login_count=1, locked_until=null
+▶ a lockout that cannot trap the real person
+  ✔ LOCK-1 one wrong guess after a quiet quarter of an hour does not add up to a lock (1478.0036ms)
+      · locked account: stranger with the right password -> 429; forged cookie -> 429; known browser -> 200
+  ✔ LOCK-2 a browser that has signed in before can still sign in while the account is locked; a stranger cannot (3674.6061ms)
+      · after a password reset the old cookie no longer opens a locked account -> 429
+  ✔ LOCK-3 a changed password makes the known-browser cookie worthless (3009.7632ms)
+  ✔ LOCK-4 many failures from a known browser stop at its own limit (25) (2758.3168ms)
+✔ a lockout that cannot trap the real person (11311.0732ms)
+      · 4 days old -> 403 temp_password_expired; listed as expired: true
+▶ one-time passwords expire; sessions and failed sign-ins do not pile up
+  ✔ TEMP-1 a one-time password stops working after 72 hours, and the user list says so (944.3565ms)
+      · left after the clean-up: live-session-test
+  ✔ SESS-1 signing in clears out sessions that ended without a sign-out (and keeps live ones) (875.8803ms)
+      · 50 failed sign-ins for unknown names -> 24 log entries
+  ✔ FLOOD-1 a flood of sign-ins for names that do not exist writes only a few log entries (3783.075ms)
+✔ one-time passwords expire; sessions and failed sign-ins do not pile up (5977.0419ms)
+      · reset without proof -> 403 reauth_required
+▶ restore, clear and reset need the password typed again
+  ✔ RE-1 the factory reset without a fresh confirmation is refused and deletes nothing (13.7265ms)
+  ✔ RE-2 a wrong password gets no proof; a forged or foreign proof is useless (1030.3668ms)
+  ✔ RE-3 replacing a module that holds data, or deleting all of its records at once, needs the proof even for the owner (313.3789ms)
+  ✔ RE-4 a first save of a module nobody has saved yet still needs no proof (the app starts that way) (33.2007ms)
+  ✔ RE-5 the reset works with a fresh proof, and is logged (273.0735ms)
+✔ restore, clear and reset need the password typed again (2331.4519ms)
+      · stock 10 -> 9; price still 1000
+▶ roles that only touch a module as part of their job
+  ✔ LIM-1 a sale may lower stock, but not change a price, a cost or a name (41.4884ms)
+  ✔ LIM-2 a sale may not add or delete products (25.1456ms)
+  ✔ LIM-3 customers: a cashier (POS only) may change the totals, not who the customer is (1050.4468ms)
+  ✔ LIM-4 the ledger: lines may be added and removed, a date moved, but an amount cannot be edited (29.3893ms)
+  ✔ LIM-5 whoever manages the module can change everything in it (inventory manager: prices; accountant: ledger) (2055.4788ms)
+✔ roles that only touch a module as part of their job (4856.1185ms)
+      · stand-in: {"name":"bill.png","type":"image/png","size":169,"stored":true}
+▶ photos are not sent with the records
+  ✔ ATT-1 /data carries a small stand-in, never the file (11.1054ms)
+  ✔ ATT-2 the file is downloaded on demand, byte for byte, as an attachment (17.9201ms)
+  ✔ ATT-3 only people who may see that module can download its files (1013.8147ms)
+  ✔ ATT-4 saving a record that holds only the stand-in keeps the stored file (19.5187ms)
+  ✔ ATT-5 a stand-in on a record that has no file becomes 'no attachment' (it is never stored as a file) (16.6618ms)
+      · 3.8 MB of base64 -> 400 Accounting Ledger "TXN-A9": attachment is too large (2.5 MB at most). Nothing was saved.
+  ✔ ATT-6 a file over 2.5 MB is refused for roles that cannot restore a backup (1004.8685ms)
+✔ photos are not sent with the records (2732.468ms)
+▶ two-step sign-in
+  ✔ MFA-1 it is available on this server and off by default (3.284ms)
+  ✔ MFA-2 setting it up needs the password; the first code from the app switches it on and shows 8 recovery codes once (522.7636ms)
+  ✔ MFA-3 after the password, sign-in is not complete until the code is given (541.2242ms)
+  ✔ MFA-4 a recovery code signs in once, then is used up (534.5942ms)
+  ✔ MFA-5 destructive actions ask for the code as well (503.7377ms)
+  ✖ MFA-6 five wrong codes pause two-step sign-in for 15 minutes, even for the right code (308.8439ms)
+  ✔ MFA-7 an administrator can switch it off for someone who lost the phone; they can then sign in with the password (268.7424ms)
+  ✔ MFA-8 switching it off needs the password and a code (2063.719ms)
+✖ two-step sign-in (6119.4272ms)
+      · Database: localhost:3306/hashil_test | Account: stranded (stranded), active, locked | This will: give it a new one-time password and make the person choose their own; unlock it and end all of its sessions. |  | Nothing was changed. Run it again with --yes to do it.
+▶ scripts
+  ✔ REC-1 owner:recover shows what it would do and changes nothing without --yes (2463.3279ms)
+  ✔ REC-2 with --yes it unlocks the account, ends its sessions and prints a one-time password that works once (962.8874ms)
+  ✔ REC-3 it can enable a disabled account and remove two-step; an unknown name is an error (1521.7252ms)
+  ✔ BAK-1 a backup is encrypted, verifies with the passphrase, and is refused with a wrong one or when damaged (1243.0077ms)
+  ✔ BAK-2 without a passphrase a backup is not written unless --plain is asked for (375.0147ms)
+✔ scripts (6933.3103ms)

@@ -18,9 +18,38 @@ export async function respond(fn: () => Promise<unknown>) {
     }
     // The full error goes to the server's log; the visitor (who may not be signed
     // in) only gets a plain explanation, never SQL, table names, addresses or ports.
-    console.error("[learnex api]", e);
+    console.error("[learnex api]", loggable(e));
     return Response.json({ error: describeError(e) }, { status: 500, headers: NO_STORE });
   }
+}
+
+/**
+ * What goes into the server's log for an unexpected failure. A database error from the driver
+ * carries the whole SQL statement (with the business data being saved) and a message that can
+ * quote parts of it; the log may be read by more people than the data, so for those only the
+ * kind of error and where it happened are written. Other failures are our own bugs: logged whole.
+ */
+function loggable(e: unknown) {
+  const err = e as { name?: unknown; code?: unknown; errno?: unknown; sqlState?: unknown; sql?: unknown; stack?: unknown } | null;
+  // Not `errno`: Node's own errors (ENOENT, ...) have one too and are not database errors.
+  const isDatabaseError =
+    !!err &&
+    typeof err === "object" &&
+    ("sql" in err ||
+      "sqlState" in err ||
+      (typeof err.code === "string" && /^(ER_|PROTOCOL_|WARN_)/.test(err.code)));
+  if (!isDatabaseError) return e;
+  // The first lines of a stack are the message (which can span lines and quote SQL or data);
+  // only the "at ..." frames are kept.
+  const frames =
+    typeof err.stack === "string"
+      ? err.stack
+          .split("\n")
+          .filter((l) => /^\s+at\s/.test(l))
+          .slice(0, 7)
+          .join("\n")
+      : "";
+  return `database error ${String(err.code ?? "")} (errno ${String(err.errno ?? "?")}, state ${String(err.sqlState ?? "?")}) - details withheld\n${frames}`;
 }
 
 // Every error code found in an error and, for a refused connection to

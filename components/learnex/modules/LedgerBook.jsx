@@ -308,7 +308,7 @@ export function LedgerBook({
                       {money(t.amount)}
                     </td>
                     <td className="py-3 px-2">
-                      <AttachmentLink attachment={t.attachment} subText={subText} />
+                      <AttachmentLink attachment={t.attachment} subText={subText} store="ledger" id={t.id} />
                     </td>
                     <td className="py-3 px-5 text-right">
                       <button

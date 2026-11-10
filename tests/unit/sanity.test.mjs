@@ -114,3 +114,12 @@ test("SAN-ATT only photos and PDFs may be attached; links that run code or leave
     assert.match(ok({ name: "x", dataUrl }), /attachment/, String(dataUrl));
   assert.match(ok("javascript:alert(1)"), /attachment/);
 });
+
+test("SAN-STUB the small stand-in the app holds instead of a stored file is accepted; a real file over 2.5 MB is not", () => {
+  const rec = (attachment) => ({ id: "T", date: "2026-01-01", type: "Expense", amount: 1, attachment });
+  assert.equal(sanityProblem("ledger", rec({ name: "bill.png", type: "image/png", size: 123, stored: true })), null);
+  const small = "data:image/png;base64," + "A".repeat(1000);
+  assert.equal(sanityProblem("ledger", rec({ name: "x.png", dataUrl: small })), null);
+  const big = "data:image/png;base64," + "A".repeat(3_800_000);
+  assert.match(sanityProblem("ledger", rec({ name: "x.png", dataUrl: big })), /2\.5 MB/);
+});

@@ -43,3 +43,6 @@ next-env.d.ts
 
 # database test suite output
 /test-results
+
+# database backups (hold all business data and password hashes: never commit)
+/db-backups/

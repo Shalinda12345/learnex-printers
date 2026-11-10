@@ -37,7 +37,7 @@ export class NotFoundError extends HttpError {
 }
 /** Conflicts with existing data, e.g. a username that's taken (409). */
 export class ConflictError extends HttpError {
-  constructor(message: string) {
-    super(409, message);
+  constructor(message: string, code?: string) {
+    super(409, message, code);
   }
 }

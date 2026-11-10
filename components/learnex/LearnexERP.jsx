@@ -58,7 +58,8 @@ import { Alert, EmptyState, Modal, SaveStatusBadge, ToastHost } from "@/componen
 import { SettingsPage } from "@/components/learnex/modules/SettingsPage";
 import { Suppliers } from "@/components/learnex/modules/Suppliers";
 import { downloadBackup } from "@/lib/learnex/backup";
-import { canWrite, usePersistentState } from "@/lib/learnex/persistence";
+import { canWrite, clearMergeNotice, peekMergeNotice, usePersistentState } from "@/lib/learnex/persistence";
+import { TwoStepDialog } from "@/components/learnex/TwoStepDialog";
 import { PasswordChangeForm } from "@/components/learnex/AuthScreens";
 import { SCREEN_PERMISSIONS } from "@/lib/auth/permissions";
 
@@ -169,6 +170,7 @@ export function LearnexERP({ auth }) {
   const [view, setView] = useState(() => Object.keys(SCREEN_PERMISSIONS).find(canOpen) || null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [twoStepOpen, setTwoStepOpen] = useState(false);
   const [dark, setDark] = useState(() => {
     const saved = readPref(PREF_THEME);
     if (saved) return saved === "dark";
@@ -179,7 +181,8 @@ export function LearnexERP({ auth }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Set when a record is picked in the search box: the screen opens with that text already searched.
   const [searchSeed, setSearchSeed] = useState(null);
-  const [toast, setToast] = useState(null);
+  // After a reload caused by a save conflict, the first message says what happened to the changes that were kept.
+  const [toast, setToast] = useState(() => peekMergeNotice() || null);
   const userMenuRef = useRef(null);
   // ---- global persisted data stores ----
   const [products, setProducts] = usePersistentState("products", SEED_PRODUCTS);
@@ -251,6 +254,7 @@ export function LearnexERP({ auth }) {
       return !o;
     });
   const closeToast = useCallback(() => setToast(null), []);
+  useEffect(() => clearMergeNotice(), []);
 
   const bg = dark ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900";
   const cardBg = dark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200/80";
@@ -584,6 +588,16 @@ export function LearnexERP({ auth }) {
                       Change password
                     </button>
                     <button
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        setTwoStepOpen(true);
+                      }}
+                      className={"w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm " + hoverRow}
+                    >
+                      <ShieldCheck size={15} className={subText} />
+                      Two-step sign-in
+                    </button>
+                    <button
                       onClick={() => auth.signOut()}
                       className="w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-lg text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10"
                     >
@@ -708,6 +722,15 @@ export function LearnexERP({ auth }) {
             }}
           />
         </Modal>
+      )}
+      {twoStepOpen && (
+        <TwoStepDialog
+          onClose={() => setTwoStepOpen(false)}
+          cardBg={cardBg}
+          dark={dark}
+          subText={subText}
+          inputBg={theme.inputBg}
+        />
       )}
       <ToastHost toast={toast} onClose={closeToast} />
     </div>

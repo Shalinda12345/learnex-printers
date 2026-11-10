@@ -7,6 +7,7 @@ import {
   backupData,
   count,
   DEAD_DB_BASE,
+  inflateAttachments,
   log,
   norm,
   one,
@@ -226,6 +227,7 @@ describe("import → reload round trip (real backup + edge cases)", () => {
     const r = await api("/import", { stores: data });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     loaded = (await api("/data")).body;
+    await inflateAttachments(loaded.stores); // /data carries stand-ins for attached files; compare with the real ones
   });
 
   test("API-2 import marks the database initialized", () => assert.equal(loaded.initialized, true));

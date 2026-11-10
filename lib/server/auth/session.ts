@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { pool } from "@/lib/server/db";
@@ -41,7 +41,68 @@ export function isHttps(request: Request) {
   return new URL(request.url).protocol === "https:";
 }
 
+/* ------------------------------------------------------------ known browsers
+   After a correct sign-in the browser is given a second cookie that proves it has signed in to
+   this account before. Anyone who knows a username can make wrong guesses and so lock the
+   account, but only for browsers that do not carry this cookie: the owner's own browser can
+   still sign in (see `trusted` in accounts.ts). The cookie is signed with the account's
+   password hash, so it cannot be forged and stops working when the password changes. */
+const DEVICE_COOKIE = "learnex_device";
+const SECURE_DEVICE_COOKIE = "__Host-learnex_device";
+const DEVICE_DAYS = 180;
+
+const deviceSignature = (userId: number, passwordHash: string) =>
+  createHmac("sha256", passwordHash).update(`learnex-device:${userId}`).digest("base64url");
+
+// One browser can be used by several people (owner, cashier, ...): the cookie holds one
+// "id.signature" entry per account, separated by "~", so signing in as one does not make the
+// browser forget the others. The newest MAX_DEVICE_ENTRIES are kept.
+const MAX_DEVICE_ENTRIES = 8;
+
+async function deviceEntries() {
+  const jar = await cookies();
+  const value = jar.get(SECURE_DEVICE_COOKIE)?.value ?? jar.get(DEVICE_COOKIE)?.value ?? "";
+  return value.split("~").filter((e) => /^\d+\.[A-Za-z0-9_-]+$/.test(e));
+}
+
+export async function rememberDevice(userId: number, passwordHash: string, request: Request) {
+  const secure = isHttps(request);
+  const jar = await cookies();
+  const others = (await deviceEntries()).filter((e) => Number(e.split(".")[0]) !== userId);
+  const entries = [...others, `${userId}.${deviceSignature(userId, passwordHash)}`].slice(-MAX_DEVICE_ENTRIES);
+  jar.set(secure ? SECURE_DEVICE_COOKIE : DEVICE_COOKIE, entries.join("~"), {
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    path: "/",
+    maxAge: DEVICE_DAYS * 24 * 60 * 60,
+  });
+}
+
+/** Has this browser signed in to this account before (and the password not changed since)? */
+export async function isKnownDevice(userId: number, passwordHash: string) {
+  const mine = (await deviceEntries()).find((e) => Number(e.split(".")[0]) === userId);
+  if (!mine) return false;
+  const expected = Buffer.from(deviceSignature(userId, passwordHash));
+  const given = Buffer.from(mine.split(".")[1] ?? "");
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
+// Sessions that ended without a sign-out (closed browser, expired) are only noticed when
+// somebody presents them, so they would pile up. Removed at most once an hour
+// (AUTH_PRUNE_MINUTES), a few thousand at a time, whenever someone signs in.
+const PRUNE_EVERY_MS = (process.env.AUTH_PRUNE_MINUTES !== undefined && process.env.AUTH_PRUNE_MINUTES !== "" && Number(process.env.AUTH_PRUNE_MINUTES) >= 0 ? Number(process.env.AUTH_PRUNE_MINUTES) : 60) * 60_000;
+let lastSessionPrune = 0;
+async function pruneSessions() {
+  if (Date.now() - lastSessionPrune < PRUNE_EVERY_MS) return;
+  lastSessionPrune = Date.now();
+  await pool
+    .query(`DELETE FROM auth_sessions WHERE expires_at < NOW(6) OR absolute_expires_at < NOW(6) LIMIT 5000`)
+    .catch(() => {});
+}
+
 export async function createSession(userId: number, request: Request) {
+  void pruneSessions();
   const token = randomBytes(32).toString("base64url");
   const now = Date.now();
   const absolute = new Date(now + ABSOLUTE_MS);

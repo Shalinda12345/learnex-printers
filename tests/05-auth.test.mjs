@@ -10,6 +10,7 @@ import {
   SETUP_CODE,
   STAFF_PASSWORD,
   THROTTLED_BASE,
+  api,
   asOwner,
   backupData,
   createStaff,
@@ -19,6 +20,7 @@ import {
   newPage,
   one,
   pool,
+  reauthToken,
   resetAuth,
   roleIds,
   rows,
@@ -369,18 +371,22 @@ describe("signing in", () => {
     assert.equal(u.locked_until, null);
   });
 
-  test("AUTH-44 after a lock ends the next wrong guess locks again for twice as long", async () => {
+  test("AUTH-44 after a lock ends the count starts again: one wrong guess does not lock the account a second time", async () => {
     await createStaff(owner, { username: "burst4", roles: ["sales"] });
     for (let i = 0; i < 5; i++) await new Client().post("/api/auth/login", { username: "burst4", password: `wrong-${i}` });
+    const locked = await one(
+      `SELECT TIMESTAMPDIFF(MINUTE, NOW(6), locked_until) AS minutes FROM auth_users WHERE username = 'burst4'`,
+    );
+    assert.ok(locked.minutes >= 14 && locked.minutes <= 15, `the lock lasts 15 minutes: ${locked.minutes}`);
     await pool.query(`UPDATE auth_users SET locked_until = NOW(6) - INTERVAL 1 MINUTE WHERE username = 'burst4'`);
     const again = await new Client().post("/api/auth/login", { username: "burst4", password: "wrong-again" });
-    const u = await one(
-      `SELECT failed_login_count AS n, TIMESTAMPDIFF(MINUTE, NOW(6), locked_until) AS minutes FROM auth_users WHERE username = 'burst4'`,
-    );
-    log(`guess after the lock ended -> ${again.status}; failed_login_count=${u.n}, locked for about ${u.minutes} more minutes`);
+    const u = await one(`SELECT failed_login_count AS n, locked_until FROM auth_users WHERE username = 'burst4'`);
+    log(`guess after the lock ended -> ${again.status}; failed_login_count=${u.n}, locked_until=${u.locked_until}`);
     assert.equal(again.status, 401);
-    assert.equal(u.n, 6);
-    assert.ok(u.minutes >= 29 && u.minutes <= 30, `${u.minutes}`);
+    assert.equal(u.n, 1, "counted from one again");
+    assert.equal(u.locked_until, null);
+    // and the right password now signs in
+    assert.equal((await new Client().post("/api/auth/login", { username: "burst4", password: STAFF_PASSWORD })).status, 200);
   });
 
   test("AUTH-49 a huge username gets the normal answer and only a short label in the activity log", async () => {
@@ -436,7 +442,7 @@ describe("signing in", () => {
 });
 
 // The rate limit is switched off on the normal test servers; :3313 runs with
-// 10 attempts per client and 40 in all per minute. Each test pretends to be a different
+// 10 attempts per client per minute (no limit shared by everybody). Each test pretends to be a different
 // client by sending its own X-Forwarded-For (the address a proxy would add).
 describe("throttling sign-in attempts", () => {
   const forwardedFor = (ip) => ({ "x-forwarded-for": ip });
@@ -466,13 +472,13 @@ describe("throttling sign-in attempts", () => {
     assert.equal(other.status, 401, "a different client still gets the normal answer");
   });
 
-  test("AUTH-53 everybody together is limited to 40 a minute, even when every request claims a new address", async () => {
+  test("AUTH-53 there is no limit shared by everybody: many different clients never block each other", async () => {
+    // A shared ceiling would let one stranger use it up and lock every real user out of signing in.
+    // The cost of a flood is bounded by the hashing queue instead (lib/server/auth/password.ts).
     const statuses = [];
     for (let i = 0; i < 45; i++) statuses.push((await signInAs(`10.2.${Math.floor(i / 200)}.${i + 1}`)).status);
-    const firstRefusal = statuses.indexOf(429);
-    log(`45 attempts, each from a "new" address -> first refusal at attempt ${firstRefusal + 1}; statuses ${statuses.join("").replace(/401/g, "·").replace(/429/g, "X")}`);
-    assert.ok(firstRefusal > 0 && firstRefusal <= 40, `first refusal at attempt ${firstRefusal + 1}`);
-    assert.ok(statuses.slice(firstRefusal).every((s) => s === 429), "once the window is full everything is refused");
+    log(`45 attempts, each from a different address -> ${statuses.join("").replace(/401/g, "·").replace(/429/g, "X")}`);
+    assert.ok(statuses.every((s) => s === 401), "every attempt got the normal answer; none was throttled");
   });
 
   test("AUTH-54 a throttled client is not locked out of anything else: the status call is never throttled", async () => {
@@ -743,7 +749,11 @@ describe("what each role can load and save", () => {
     assert.equal(r.status, 200, JSON.stringify(r.body));
   };
   const ledgerIds = async () => (await owner.get("/api/learnex/data")).body.stores.ledger.map((e) => e.id);
-  const sync = (client, change) => client.post("/api/learnex/sync", { changes: [change] });
+  // (restoring and emptying also need the password typed again: every call here carries a fresh proof of it)
+  const sync = async (client, change) => {
+    const token = await reauthToken(client, client === owner ? OWNER.password : STAFF_PASSWORD, true);
+    return client.post("/api/learnex/sync", { changes: [change] }, token ? { "x-reauth": token } : {});
+  };
 
   test("AUTH-45 Sales & POS cannot replace a module that already has data (replace is refused, nothing changes)", async () => {
     const before = await ledgerIds();
@@ -768,7 +778,7 @@ describe("what each role can load and save", () => {
   });
 
   test("AUTH-46 the very first save of a module nobody has saved yet is still allowed with replace — but only once", async () => {
-    assert.equal((await owner.post("/api/learnex/reset", {})).status, 200);
+    assert.equal((await api("/reset", {})).status, 200);
     const first = await sync(sales, { store: "customers", replace: true, upserts: [{ id: 7001, name: "First saved" }], order: [7001] });
     const saved = await one(`SELECT name FROM customers WHERE id = 7001`);
     const second = await sync(sales, { store: "customers", replace: true, upserts: [{ id: 7002, name: "Overwrites" }], order: [7002] });

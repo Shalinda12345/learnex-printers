@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { changePassword, login, registerOwner } from "@/lib/learnex/auth-client";
+import { changePassword, login, loginWithCode, registerOwner } from "@/lib/learnex/auth-client";
 import {
   GateButton,
   GateError,
@@ -134,13 +134,57 @@ export function LoginScreen({ onDone, notice }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const { busy, error, run } = usePending();
+  // Two-step sign-in: after the password the account asks for the code from its authenticator app.
+  const [ticket, setTicket] = useState(null);
+  const [code, setCode] = useState("");
 
   function submit(e) {
     e.preventDefault();
     run(async () => {
-      await login(username, password);
+      if (ticket) {
+        await loginWithCode(ticket, code);
+        await onDone();
+        return;
+      }
+      const result = await login(username, password);
+      if (result && result.mfaRequired) {
+        setTicket(result.ticket);
+        return;
+      }
       await onDone();
     });
+  }
+
+  if (ticket) {
+    return (
+      <GateShell>
+        <GateHeading icon={ShieldCheck}>Enter your code</GateHeading>
+        <GateText>Open your authenticator app and type the 6-digit code for LEARNEX ERP. Lost your phone? Use one of your recovery codes.</GateText>
+        <form onSubmit={submit}>
+          <GateField
+            label="Authenticator or recovery code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            autoComplete="one-time-code"
+            inputMode="numeric"
+            autoFocus
+            required
+          />
+          <GateError>{error}</GateError>
+          <GateButton type="submit" busy={busy}>
+            {busy ? "Checking…" : "Sign In"}
+          </GateButton>
+        </form>
+        <GateLink
+          onClick={() => {
+            setTicket(null);
+            setCode("");
+          }}
+        >
+          Back
+        </GateLink>
+      </GateShell>
+    );
   }
 
   return (
