@@ -650,8 +650,11 @@ describe("C. Access control", () => {
   test("SEC-24b [A01] a user manager cannot reset, disable or edit an account that holds permissions they lack (account takeover)", async () => {
     const um = await owner.post("/api/roles", { name: "Users only 2", description: "", permissions: ["users.manage"] });
     const userMgr = await staffWithRoleId(owner, "sec-um2", um.body.id);
-    const victim = await owner.post("/api/user", { username: "sec-victim", name: "Victim", roleIds: [ids.administrator] });
-    const peer = await owner.post("/api/user", { username: "sec-peer", name: "Peer", roleIds: [um.body.id] });
+    // (own usernames: "sec-victim" is taken by an earlier test, and a refused create would leave the ids undefined)
+    const victim = await owner.post("/api/user", { username: "sec-victim-admin", name: "Victim", roleIds: [ids.administrator] });
+    const peer = await owner.post("/api/user", { username: "sec-peer-um", name: "Peer", roleIds: [um.body.id] });
+    assert.equal(victim.status, 200, JSON.stringify(victim.body));
+    assert.equal(peer.status, 200, JSON.stringify(peer.body));
     const attempts = [
       ["reset Administrator's password", await userMgr.post(`/api/user/${victim.body.id}/password`, {})],
       ["disable Administrator", await userMgr.patch(`/api/user/${victim.body.id}`, { status: "disabled" })],
