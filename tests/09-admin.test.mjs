@@ -4,6 +4,7 @@
 import { test, describe, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
+  confirmPassword,
   Client,
   OWNER,
   STAFF_PASSWORD,
@@ -109,6 +110,7 @@ describe("Settings", () => {
       "nothing to clear",
     );
     await moduleRow("Accounting Ledger").getByRole("button", { name: /Clear/ }).click();
+    await confirmPassword(page);
     const message = await toast(page).innerText();
     await waitSaved(page);
     const s = await stores();
@@ -128,6 +130,7 @@ describe("Settings", () => {
       mimeType: "application/json",
       buffer: Buffer.from('{"hello":"world"}'),
     });
+    await confirmPassword(page);
     const message = await toast(page).innerText();
     log(message);
     assert.equal(message, "Couldn't restore that file — it doesn't look like a valid LEARNEX backup.");

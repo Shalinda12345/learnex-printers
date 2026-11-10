@@ -156,15 +156,19 @@ function problemIn(rec: Rec, spec: Spec, where: string, latest: string): string 
 const SAFE_ATTACHMENT_URL = /^data:(image\/(png|jpe?g|gif|webp|bmp|avif|heic|heif)|application\/pdf);base64,[A-Za-z0-9+/]*={0,2}$/i;
 
 const MAX_RECORD_CHARS = 1_000_000; // a record without its attachment (a big order is a few KB)
-const MAX_ATTACHMENT_CHARS = 14_000_000; // ≈ a 10 MB photo or PDF as base64
+// ≈ a 2.5 MB photo or PDF as base64. Small on purpose: the host (Vercel) refuses requests of about
+// 4.5 MB, and the screens shrink photos before they are attached (lib/learnex/image.js).
+const MAX_ATTACHMENT_CHARS = 3_700_000;
 
 function attachmentProblem(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "object" || Array.isArray(value)) return "attachment must be a file";
+  // the small stand-in the app got instead of a stored file: the server keeps the stored file
+  if ((value as Rec).stored === true || (value as Rec).stored === 1) return null;
   const { name, dataUrl } = value as Rec;
   if (typeof dataUrl !== "string" || !SAFE_ATTACHMENT_URL.test(dataUrl))
     return "attachment must be a PNG, JPEG, GIF, WebP or PDF file";
-  if (dataUrl.length > MAX_ATTACHMENT_CHARS) return "attachment is too large (10 MB at most)";
+  if (dataUrl.length > MAX_ATTACHMENT_CHARS) return "attachment is too large (2.5 MB at most)";
   if (name !== undefined && name !== null && (typeof name !== "string" || name.length > 255))
     return "attachment name is too long";
   return null;

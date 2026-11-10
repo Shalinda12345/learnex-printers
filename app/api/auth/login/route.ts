@@ -3,12 +3,13 @@ import { requireHttpsIfConfigured, requireSameOrigin } from "@/lib/server/auth/d
 import { login } from "@/lib/server/auth/accounts";
 import { limitAttempts } from "@/lib/server/rate-limit";
 
-// Sign in with username (or email) and password; sets the session cookie.
+// Sign in with username (or email) and password; sets the session cookie. For an account with
+// two-step sign-in the answer is { mfaRequired, ticket } and /api/auth/mfa/verify finishes it.
 export async function POST(request: Request) {
   return respond(async () => {
     requireSameOrigin(request);
     requireHttpsIfConfigured(request);
     limitAttempts("login", request);
-    await login(await readJson(request, BODY_LIMITS.auth), request);
+    return login(await readJson(request, BODY_LIMITS.auth), request);
   });
 }

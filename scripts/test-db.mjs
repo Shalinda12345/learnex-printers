@@ -31,6 +31,8 @@ deadUrl.port = "1";
 
 // The test servers get their own owner-setup code (never the real one).
 const TEST_SETUP_CODE = "test-setup-" + Math.random().toString(36).slice(2);
+// ... and their own key for the authenticator secrets (two-step sign-in)
+const TEST_MFA_KEY = "test-mfa-key-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 
 const PORT = Number(process.env.TEST_PORT_BASE) || 3311;
 const env = {
@@ -54,11 +56,11 @@ if (setup.status !== 0) process.exit(setup.status ?? 1);
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
 // The sign-in rate limit is off on the normal test servers: the suites sign in dozens
 // of times a minute from one address on purpose. The third server runs with the limits on.
-const NO_RATE_LIMIT = { AUTH_RATE_LIMIT: "0", AUTH_RATE_LIMIT_GLOBAL: "0" };
+const NO_RATE_LIMIT = { AUTH_RATE_LIMIT: "0" };
 function startServer(port, databaseUrl, extraEnv = NO_RATE_LIMIT) {
   return spawn(process.execPath, [nextBin, "start", "-p", String(port)], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: databaseUrl, AUTH_SETUP_CODE: TEST_SETUP_CODE, ...extraEnv },
+    env: { ...process.env, DATABASE_URL: databaseUrl, AUTH_SETUP_CODE: TEST_SETUP_CODE, AUTH_MFA_KEY: TEST_MFA_KEY, ...extraEnv },
     stdio: "ignore",
   });
 }
@@ -77,11 +79,11 @@ async function waitFor(url) {
 const servers = [
   startServer(PORT, TEST_DATABASE_URL),
   startServer(PORT + 1, deadUrl.toString()),
-  // real limits: 10 attempts per client and 40 in all, per minute
+  // real limit: 10 attempts per client per minute
   startServer(PORT + 2, TEST_DATABASE_URL, {
     AUTH_RATE_LIMIT: "10",
-    AUTH_RATE_LIMIT_GLOBAL: "40",
     AUTH_RATE_WINDOW_SECONDS: "60",
+    AUTH_PRUNE_MINUTES: "0", // every sign-in here also clears out ended sessions (tested in 13-hardening)
   }),
 ];
 const stopServers = () => servers.forEach((s) => s.kill());
@@ -106,6 +108,8 @@ try {
     "09-admin",
     "10-statements",
     "11-security",
+    "12-concurrency",
+    "13-hardening",
     "04-limitations",
   ];
   const only = process.argv.slice(2);

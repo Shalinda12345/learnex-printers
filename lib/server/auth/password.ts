@@ -1,14 +1,12 @@
 import "server-only";
-import { randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual, type ScryptOptions } from "node:crypto";
+import { randomBytes, randomInt, type ScryptOptions } from "node:crypto";
 import { commonPasswordProblem } from "@/lib/auth/common-passwords";
+import { deriveKey, hashPassword as hashWith, verifyPassword as verifyWith } from "@/lib/auth/password-hash";
 import { HttpError } from "@/lib/server/errors";
 
-// scrypt with OWASP's recommended cost (N=2^16, r=8, p=2 ≈ 64 MiB per hash).
-// The parameters are stored with each hash, so they can be raised later:
-// older hashes keep verifying and are upgraded at the user's next login.
-const PARAMS = { N: 2 ** 16, r: 8, p: 2 };
-const KEY_LENGTH = 64;
-const MAX_MEMORY = 256 * 1024 * 1024;
+// The hash format (scrypt, OWASP's recommended cost; the parameters are stored with each
+// hash so older hashes keep verifying and are upgraded at the user's next login) lives in
+// lib/auth/password-hash.js, shared with scripts/owner-recover.mjs. This file adds the queue.
 
 export const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
@@ -37,32 +35,16 @@ async function inTurn<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-function scrypt(password: string, salt: Buffer, options: ScryptOptions): Promise<Buffer> {
-  return inTurn(
-    () =>
-      new Promise<Buffer>((resolve, reject) =>
-        scryptCb(password.normalize("NFKC"), salt, KEY_LENGTH, { ...options, maxmem: MAX_MEMORY }, (err, key) =>
-          err ? reject(err) : resolve(key),
-        ),
-      ),
-  );
-}
+const inQueue = (password: string, salt: Buffer, options: ScryptOptions): Promise<Buffer> =>
+  inTurn(() => deriveKey(password, salt, options));
 
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16);
-  const key = await scrypt(password, salt, PARAMS);
-  return ["scrypt", PARAMS.N, PARAMS.r, PARAMS.p, salt.toString("base64"), key.toString("base64")].join("$");
+export function hashPassword(password: string): Promise<string> {
+  return hashWith(password, inQueue);
 }
 
 /** Checks a password against a stored hash. `needsRehash` = stored with weaker parameters than today's. */
-export async function verifyPassword(password: string, stored: string) {
-  const [scheme, N, r, p, salt, key] = stored.split("$");
-  if (scheme !== "scrypt" || !key) return { ok: false, needsRehash: false };
-  const expected = Buffer.from(key, "base64");
-  const actual = await scrypt(password, Buffer.from(salt, "base64"), { N: +N, r: +r, p: +p });
-  const ok = actual.length === expected.length && timingSafeEqual(actual, expected);
-  const needsRehash = +N < PARAMS.N || +r < PARAMS.r || +p < PARAMS.p;
-  return { ok, needsRehash };
+export function verifyPassword(password: string, stored: string): Promise<{ ok: boolean; needsRehash: boolean }> {
+  return verifyWith(password, stored, inQueue);
 }
 
 // Used when the username doesn't exist, so a failed login takes the same time

@@ -789,7 +789,7 @@ export function SalesOrders({
                   </td>
                   <td className={`py-3 px-2 ${subText} whitespace-nowrap`}>{fmtDate(o.date)}</td>
                   <td className="py-3 px-2">
-                    <AttachmentLink attachment={o.attachment} subText={subText} />
+                    <AttachmentLink attachment={o.attachment} subText={subText} store="salesOrders" id={o.id} />
                   </td>
                   <td className="py-3 px-5">
                     <div className="flex items-center justify-end gap-1.5">
@@ -1000,7 +1000,7 @@ export function SalesOrders({
                 payment here only clears the balance.
               </p>
             )}
-            <AttachmentLink attachment={selected.attachment} subText={subText} />
+            <AttachmentLink attachment={selected.attachment} subText={subText} store="salesOrders" id={selected.id} />
             <button
               onClick={() => printInvoice(selected)}
               className="btn btn-primary btn-block mt-2"

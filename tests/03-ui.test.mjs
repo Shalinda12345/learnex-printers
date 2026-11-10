@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  confirmPassword,
   asOwner,
   DEAD_DB_BASE,
   FIXTURE_BACKUP,
@@ -92,7 +93,13 @@ describe("first start and everyday use", () => {
     await page.getByText("Start with demo data").click();
     await page.locator("aside nav").waitFor();
     await waitSaved(page);
-    const counts = await moduleCounts();
+    // (the very first save loads the server's code for the first time, so give it a moment instead of assuming 450 ms)
+    let counts = await moduleCounts();
+    for (let i = 0; i < 40 && counts.modules_saved < DEMO.modules_saved; i++) {
+      await page.waitForTimeout(250);
+      counts = await moduleCounts();
+    }
+    await waitSaved(page);
     log("rows per table:", JSON.stringify(counts));
     assert.deepEqual(counts, DEMO);
     assertNoConsoleProblems(page);
@@ -272,6 +279,7 @@ describe("first start and everyday use", () => {
 
   test("UI-10 Restore from Backup replaces the data and saves it to the database", async () => {
     await page.locator("main input[type=file]").setInputFiles(fixturePath);
+    await confirmPassword(page);
     await page.getByText(/Backup restored/).waitFor();
     await waitSaved(page);
     const counts = await moduleCounts();
@@ -292,6 +300,7 @@ describe("first start and everyday use", () => {
       .locator("main div.rounded-xl", { has: page.getByText("Customers", { exact: true }) })
       .getByRole("button", { name: /Clear/ })
       .click();
+    await confirmPassword(page);
     await waitSaved(page);
     const afterCounts = await moduleCounts();
     log(
@@ -305,6 +314,7 @@ describe("first start and everyday use", () => {
   test("UI-12 Factory Reset restores the demo data in the database", async () => {
     const reloaded = page.waitForEvent("load");
     await page.locator("button", { hasText: "Factory Reset Everything" }).click();
+    await confirmPassword(page);
     await reloaded;
     await page.locator("aside nav").waitFor();
     await waitSaved(page);

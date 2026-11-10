@@ -7,6 +7,7 @@ import {
   deleteRole,
   listRoles,
   listUsers,
+  resetUserMfa,
   resetUserPassword,
   setUserRoles,
   signOutUser,
@@ -80,6 +81,11 @@ export function UsersAndRoles({ auth, dark, cardBg, subText, inputBg, hoverRow, 
       return;
     const r = await act(() => resetUserPassword(u.id));
     if (r) setOneTimePassword({ user: u, password: r.temporaryPassword, reason: "reset" });
+  }
+  function resetTwoStep(u) {
+    if (!window.confirm(`Switch off ${u.name}'s two-step sign-in? They can sign in with just their password until they set it up again.`))
+      return;
+    act(() => resetUserMfa(u.id), `${u.name}'s two-step sign-in was switched off.`);
   }
   function toggleStatus(u) {
     const disabling = u.status === "active";
@@ -170,8 +176,13 @@ export function UsersAndRoles({ auth, dark, cardBg, subText, inputBg, hoverRow, 
                           <Badge tone={u.status === "active" ? "green" : "red"}>
                             {u.status === "active" ? "Active" : "Disabled"}
                           </Badge>
-                          {u.mustChangePassword && <Badge tone="amber">One-time password</Badge>}
+                          {u.mustChangePassword && (
+                            <Badge tone={u.oneTimePasswordExpired ? "red" : "amber"}>
+                              {u.oneTimePasswordExpired ? "One-time password expired" : "One-time password"}
+                            </Badge>
+                          )}
                           {u.lockedUntil && <Badge tone="amber">Locked</Badge>}
+                          {u.mfaEnabled && <Badge tone="blue">Two-step</Badge>}
                         </div>
                       </td>
                       <td className={`py-3 px-2 ${subText} text-xs`}>
@@ -186,6 +197,11 @@ export function UsersAndRoles({ auth, dark, cardBg, subText, inputBg, hoverRow, 
                           {!self && (
                             <button onClick={() => resetPassword(u)} className={textBtn(dark)}>
                               Reset password
+                            </button>
+                          )}
+                          {!self && u.mfaEnabled && (
+                            <button onClick={() => resetTwoStep(u)} className={textBtn(dark)}>
+                              Reset two-step
                             </button>
                           )}
                           {!self && u.activeSessions > 0 && (

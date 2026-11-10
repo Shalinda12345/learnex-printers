@@ -168,6 +168,24 @@ test("DB-5 the app logs in with its own account, which can only reach the app's 
   );
 });
 
+test("DB-8 on the real database the app's login can only read and change data, not alter or drop tables", async () => {
+  const { me } = await one(`SELECT CURRENT_USER() AS me`);
+  const at = me.lastIndexOf("@");
+  const grantee = `'${me.slice(0, at)}'@'${me.slice(at + 1)}'`;
+  const grants = await rows(
+    `SELECT table_schema AS s, privilege_type AS p FROM information_schema.schema_privileges WHERE grantee = ?`,
+    [grantee],
+  );
+  const real = grants.map((g) => ({ db: g.s.replace(/\\(.)/g, "$1"), p: g.p })).filter((g) => !g.db.endsWith("_test"));
+  log(`rights on real databases: ${[...new Set(real.map((g) => g.db + ":" + g.p))].join(", ") || "none"}`);
+  const allowed = ["SELECT", "INSERT", "UPDATE", "DELETE"];
+  assert.deepEqual(
+    real.filter((g) => !allowed.includes(g.p)),
+    [],
+    "only SELECT, INSERT, UPDATE, DELETE (run `npm run db:setup` to take back the rest)",
+  );
+});
+
 test("DB-6 the migration is recorded in schema_migrations", async () => {
   const applied = await rows(`SELECT name, applied_at FROM schema_migrations ORDER BY name`);
   applied.forEach((m) => log(m.name, "applied", m.applied_at.toISOString()));

@@ -1,6 +1,6 @@
 import "server-only";
 import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { pool, withTransaction } from "@/lib/server/db";
+import { pool, withTransaction, type Db } from "@/lib/server/db";
 import {
   STORES,
   STORE_BY_KEY,
@@ -12,9 +12,9 @@ import {
   type ReplaceStore,
   type SingleStore,
 } from "@/lib/server/learnex/stores";
-import { BadRequestError, ForbiddenError } from "@/lib/server/errors";
+import { BadRequestError, ConflictError, ForbiddenError } from "@/lib/server/errors";
 import { audit, type Actor } from "@/lib/server/audit";
-import { STORE_LABELS, type StoreAccess, type StoreKey } from "@/lib/auth/permissions";
+import { LIMITED_WRITES, STORE_LABELS, type LimitedWrite, type StoreAccess, type StoreKey } from "@/lib/auth/permissions";
 import { sanityProblem } from "@/lib/server/learnex/sanity";
 
 type Rec = Record<string, unknown>;
@@ -44,6 +44,16 @@ export interface StoreChange {
   order?: unknown[];
   /** list modules: the client has never saved this module — replace it entirely */
   replace?: boolean;
+  /**
+   * list modules, optimistic locking: for each record in `upserts` that the client
+   * loaded from the database, the version it loaded (see `versions` in loadAll).
+   * If the stored record has changed since, the save is refused (409 `conflict`)
+   * instead of silently overwriting someone else's work. Optional: a client that
+   * sends neither `base` nor `creates` (older browser tabs) is not checked.
+   */
+  base?: Record<string, string>;
+  /** list modules: ids of records the client believes are new; refused if one already exists */
+  creates?: unknown[];
   /** settings / users: the whole new value */
   value?: unknown;
 }
@@ -69,6 +79,9 @@ const BATCH_IDS = 1000;
 // records in a module from deleting them a few at a time over several requests.
 // Those requests are all recorded in the activity log.
 const MASS_DELETE_MIN = 10;
+
+const reauthRequired = (what: string) =>
+  new ForbiddenError(`Confirm your password to ${what}. Nothing was saved.`, "reauth_required");
 
 const q = (identifier: string) => `\`${identifier}\``;
 const isPlainObject = (v: unknown): v is Rec => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -252,6 +265,150 @@ async function markInitialized(conn: PoolConnection, store: string) {
 }
 
 /* ------------------------------------------------------------------ */
+/* attachments (photos of bills) are not sent with the records          */
+/* ------------------------------------------------------------------ */
+
+// A photo can be several megabytes, and every record used to carry its own into the browser at
+// start-up. Now the records come with a small stand-in, { name, type, size, stored: true }, and
+// the file itself is fetched when somebody clicks "View slip" (GET /api/learnex/attachment).
+// Saving a record that still holds the stand-in leaves the stored file untouched. A stand-in is
+// never written to the database as if it were a file.
+const ATTACHMENT = "attachment";
+const hasAttachmentColumn = (def: ListStore) => def.fields.some((f) => isColumn(f) && f.col === ATTACHMENT);
+export const isAttachmentStub = (v: unknown): v is Rec => isPlainObject(v) && (v.stored === true || v.stored === 1);
+
+// The columns the app reads, without the attachment; for modules that have one, a few cheap
+// values that say whether a file is stored and what it is.
+function lightSelect(def: ListStore) {
+  const cols = [
+    ...def.fields.filter(isColumn).filter((f) => f.col !== ATTACHMENT).map((f) => q(f.col)),
+    q("position"),
+    q("extra"),
+  ];
+  if (hasAttachmentColumn(def)) {
+    const a = q(ATTACHMENT);
+    cols.push(
+      `(${a} IS NOT NULL AND JSON_TYPE(${a}) = 'OBJECT') AS \`_att\``,
+      `JSON_UNQUOTE(JSON_EXTRACT(${a}, '$.name')) AS \`_att_name\``,
+      `JSON_UNQUOTE(JSON_EXTRACT(${a}, '$.type')) AS \`_att_type\``,
+      `LENGTH(${a}) AS \`_att_size\``,
+    );
+  }
+  return cols.join(", ");
+}
+
+// Puts the stand-in where the attachment column would have been.
+function withStub(def: ListStore, row: RowDataPacket) {
+  if (hasAttachmentColumn(def) && Number(row._att)) {
+    row[ATTACHMENT] = JSON.stringify({
+      name: row._att_name ?? "attachment",
+      type: row._att_type ?? "",
+      size: Number(row._att_size),
+      stored: true,
+    });
+  }
+  return row;
+}
+
+// Saved records that hold a stand-in keep their stored file. (A stand-in for a file that is not
+// there, e.g. the record is new or was cleared, becomes "no attachment".) Returns the ids to keep.
+async function keepStoredFiles(conn: PoolConnection, def: ListStore, upserts: Rec[]) {
+  const keep = new Set<string>();
+  if (!hasAttachmentColumn(def)) return keep;
+  const stubbed = upserts.filter((r) => isAttachmentStub(r.attachment));
+  if (!stubbed.length) return keep;
+  for (const batch of chunks(
+    stubbed.map((r) => r.id as string | number),
+    BATCH_IDS,
+  )) {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT \`id\` FROM ${q(def.table)} WHERE \`id\` IN (?) AND ${q(ATTACHMENT)} IS NOT NULL`,
+      [batch],
+    );
+    for (const r of rows) keep.add(String(r.id));
+  }
+  for (const rec of stubbed) if (!keep.has(String(rec.id))) rec.attachment = null;
+  return keep;
+}
+
+/** Replaces each stand-in in `upserts` by the file currently stored for that record (if any). */
+async function restoreStandIns(conn: PoolConnection, def: ListStore, upserts: Rec[]) {
+  if (!hasAttachmentColumn(def)) return;
+  const stubbed = new Map(upserts.filter((r) => isAttachmentStub(r.attachment)).map((r) => [String(r.id), r]));
+  if (!stubbed.size) return;
+  for (const batch of chunks([...stubbed.values()].map((r) => r.id as string | number), BATCH_IDS)) {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT \`id\`, ${q(ATTACHMENT)} AS a FROM ${q(def.table)} WHERE \`id\` IN (?) AND ${q(ATTACHMENT)} IS NOT NULL`,
+      [batch],
+    );
+    for (const r of rows) {
+      const rec = stubbed.get(String(r.id));
+      if (rec) rec.attachment = typeof r.a === "string" ? JSON.parse(r.a) : r.a;
+    }
+  }
+}
+
+/** The stored file of one record (for the download), or null. */
+export async function loadAttachment(storeKey: string, id: unknown) {
+  const def = STORE_BY_KEY.get(storeKey);
+  if (!def || def.kind !== "list" || !hasAttachmentColumn(def)) return null;
+  const checked = checkId(def, def.idType === "bigint" ? Number(id) : id);
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT ${q(ATTACHMENT)} AS a FROM ${q(def.table)} WHERE \`id\` = ?`,
+    [checked],
+  );
+  return rows[0]?.a ? (JSON.parse(rows[0].a) as { name?: string; type?: string; dataUrl?: string }) : null;
+}
+
+/* ------------------------------------------------------------------ */
+/* roles that may only touch part of a module (LIMITED_WRITES)          */
+/* ------------------------------------------------------------------ */
+
+const sameValue = (a: unknown, b: unknown) => {
+  const none = (v: unknown) => v === null || v === undefined;
+  if (none(a) || none(b)) return none(a) && none(b);
+  if (typeof a === "number" || typeof b === "number") return Number(a) === Number(b);
+  return JSON.stringify(a) === JSON.stringify(b);
+};
+
+async function enforceLimited(
+  conn: PoolConnection,
+  def: ListStore,
+  rule: LimitedWrite,
+  label: string,
+  upserts: Rec[],
+  upsertIds: (string | number)[],
+  deleteIds: (string | number)[],
+) {
+  const refuse = (what: string) =>
+    new ForbiddenError(`You don't have permission to ${what} ${label}. Nothing was saved.`, "limited_write");
+  if (deleteIds.length && !rule.remove) throw refuse("delete records in");
+  const existing = new Map<string, { record: Rec; hadFile: boolean }>();
+  for (const batch of chunks(upsertIds, BATCH_IDS)) {
+    const [rows] = await conn.query<RowDataPacket[]>(
+      `SELECT ${lightSelect(def)} FROM ${q(def.table)} WHERE \`id\` IN (?)`,
+      [batch],
+    );
+    for (const r of rows)
+      existing.set(String(r.id), { record: joinRecord(withStub(def, r), def.fields, new Map()), hadFile: !!Number(r._att) });
+  }
+  for (const rec of upserts) {
+    const old = existing.get(String(rec.id));
+    if (!old) {
+      if (!rule.create) throw refuse("add records to");
+      continue;
+    }
+    for (const key of new Set([...Object.keys(old.record), ...Object.keys(rec)])) {
+      if (rule.fields.includes(key) || key === ATTACHMENT) continue;
+      if (!sameValue(old.record[key], rec[key]))
+        throw refuse(`change ${key} of ${JSON.stringify(rec.id)} in`);
+    }
+    // a file that is already stored can only be kept (its stand-in), not swapped for another
+    if (old.hadFile && rec.attachment && !isAttachmentStub(rec.attachment)) throw refuse("replace the attached file in");
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* list modules (records with ids)                                      */
 /* ------------------------------------------------------------------ */
 
@@ -282,6 +439,8 @@ async function writeListRecords(
   def: ListStore,
   records: Rec[],
   position: Map<unknown, number>,
+  /** ids whose stored attachment must not be touched (the record holds only its stand-in) */
+  keepFile: Set<string> = new Set(),
 ) {
   const rows: Rec[] = [];
   const childRows = new Map<ChildList, Rec[]>();
@@ -297,7 +456,15 @@ async function writeListRecords(
       childRows.set(child, out);
     }
   }
-  await insertRows(conn, def.table, tableColumns(def.fields), rows, true);
+  const columns = tableColumns(def.fields);
+  await insertRows(conn, def.table, columns, rows.filter((r) => !keepFile.has(String(r.id))), true);
+  await insertRows(
+    conn,
+    def.table,
+    columns.filter((c) => c.col !== ATTACHMENT),
+    rows.filter((r) => keepFile.has(String(r.id))),
+    true,
+  );
 
   // Child lists are replaced as a whole for every saved record.
   const ids = records.map((r) => r.id);
@@ -351,9 +518,13 @@ const brief = (v: unknown) => {
 async function describeChanges(conn: PoolConnection, def: ListStore, upserts: Rec[], deleteIds: unknown[]) {
   const wanted = [...upserts.slice(0, AUDIT_RECORDS).map((r) => r.id), ...deleteIds.slice(0, AUDIT_RECORDS)];
   if (!wanted.length) return {};
-  const [rows] = await conn.query<RowDataPacket[]>(`SELECT * FROM ${q(def.table)} WHERE \`id\` IN (?)`, [wanted]);
+  // (only the columns that are compared: a row can carry a multi-megabyte photo)
+  const [rows] = await conn.query<RowDataPacket[]>(
+    `SELECT ${lightSelect(def)} FROM ${q(def.table)} WHERE \`id\` IN (?)`,
+    [wanted],
+  );
   const old = new Map(rows.map((r) => [String(r.id), r]));
-  const columns = def.fields.filter(isColumn);
+  const columns = def.fields.filter(isColumn).filter((f) => f.col !== ATTACHMENT);
   const valueOf = (row: RowDataPacket, f: Column) => (row[f.col] == null ? null : fromDb(f.type, row[f.col]));
   const edits: Rec[] = [];
   for (const rec of upserts.slice(0, AUDIT_RECORDS)) {
@@ -365,6 +536,12 @@ async function describeChanges(conn: PoolConnection, def: ListStore, upserts: Re
       const to = rec[f.prop] ?? null;
       if (JSON.stringify(from) !== JSON.stringify(to) && !(typeof from === "number" && Number(to) === from))
         changed[f.prop] = { from: brief(from), to: brief(to) };
+    }
+    if (hasAttachmentColumn(def)) {
+      const had = !!Number(row._att);
+      const has = rec.attachment !== null && rec.attachment !== undefined;
+      if (had !== has || (had && has && !isAttachmentStub(rec.attachment)))
+        changed.attachment = { from: had ? "file" : null, to: has ? (isAttachmentStub(rec.attachment) ? "file" : "new file") : null };
     }
     if (Object.keys(changed).length) edits.push({ id: rec.id, changed });
   }
@@ -382,14 +559,94 @@ async function describeChanges(conn: PoolConnection, def: ListStore, upserts: Re
   return { ...(edits.length ? { edits } : {}), ...(removed.length ? { removed } : {}) };
 }
 
+/* ------------------------------------------------------------------ */
+/* record versions (optimistic locking)                                 */
+/* ------------------------------------------------------------------ */
+
+// A record's version is its `updated_at` to the microsecond, as text. Every list
+// table has that column and sets it on each write, so no schema change is needed.
+// (Re-ordering the list changes `position` only, not the version.)
+const VERSION_SQL = "DATE_FORMAT(`updated_at`, '%Y-%m-%d %H:%i:%s.%f')";
+export type Versions = Record<string, string>;
+
+/** Versions of the given records (`lock`: hold them until the transaction ends). */
+async function readVersions(db: Db, def: ListStore, ids: (string | number)[], lock = false) {
+  const out: Versions = {};
+  for (const batch of chunks(ids, BATCH_IDS)) {
+    const [rows] = await db.query<RowDataPacket[]>(
+      `SELECT \`id\`, ${VERSION_SQL} AS v FROM ${q(def.table)} WHERE \`id\` IN (?)${lock ? " FOR UPDATE" : ""}`,
+      [batch],
+    );
+    for (const r of rows) out[String(r.id)] = r.v;
+  }
+  return out;
+}
+
+// Refuses the save when it would overwrite a record somebody else created or changed
+// since this client loaded it. Runs inside the save's transaction with the rows locked,
+// so two saves of the same record take turns and the second one sees the first.
+async function checkVersions(
+  conn: PoolConnection,
+  def: ListStore,
+  label: string,
+  upsertIds: (string | number)[],
+  change: StoreChange,
+) {
+  const { base, creates } = change;
+  if (base === undefined && creates === undefined) return; // older client: no checking
+  if (base !== undefined && (!isPlainObject(base) || !Object.values(base).every((v) => typeof v === "string")))
+    throw new BadRequestError(`${def.key}: base must map record ids to version texts`);
+  if (creates !== undefined && !Array.isArray(creates))
+    throw new BadRequestError(`${def.key}: creates must be a list of ids`);
+  const created = new Set((creates ?? []).map((id) => String(checkId(def, id))));
+  const known = (base ?? {}) as Versions;
+  const current = await readVersions(conn, def, upsertIds, true);
+  const clashes: string[] = [];
+  for (const id of upsertIds.map(String)) {
+    const now = current[id];
+    if (created.has(id)) {
+      if (now !== undefined) clashes.push(`${id} was just created by someone else`);
+    } else if (Object.hasOwn(known, id)) {
+      if (now === undefined) clashes.push(`${id} was deleted by someone else`);
+      else if (now !== known[id]) clashes.push(`${id} was changed by someone else`);
+    }
+  }
+  if (clashes.length) {
+    const shown = clashes.slice(0, 3).join("; ") + (clashes.length > 3 ? `; and ${clashes.length - 3} more` : "");
+    throw new ConflictError(
+      `${label}: ${shown}. Reload the page to get the latest data. Nothing was saved.`,
+      "conflict",
+    );
+  }
+}
+
 /**
  * `wholeModules`: may this user replace or empty the module in one go? Without
  * it, `replace` is only the very first save of a module nobody has saved yet,
  * one request may not delete every record of a module that has many, and what
  * is saved must pass the sanity checks (lib/server/learnex/sanity.ts). The same
  * permission means "trusted to write any data, as a backup restore does".
+ *
+ * Even with it, replacing a module that already holds data, or deleting all of its records at
+ * once, is only done for a request that carries a fresh password re-confirmation (`reauthed`,
+ * see lib/server/auth/reauth.ts): a left-open browser or a stolen session must not be able to
+ * wipe the business with one click.
+ *
+ * Roles that are not in charge of a module but write to it as part of their own job (a sale
+ * lowers stock) may only change what that job changes: see LIMITED_WRITES.
  */
-async function syncList(conn: PoolConnection, def: ListStore, change: StoreChange, wholeModules: boolean) {
+interface SaveContext {
+  wholeModules: boolean;
+  reauthed: boolean;
+  access: AccessMap;
+  /** the modules this user has full control of; undefined = no per-module limits (internal callers) */
+  fullStores?: ReadonlySet<string>;
+  /** receives the new version of every record written */
+  versions: Record<string, Versions>;
+}
+
+async function syncList(conn: PoolConnection, def: ListStore, change: StoreChange, ctx: SaveContext) {
+  const { wholeModules, reauthed, versions: versionsOut } = ctx;
   const upserts = change.upserts ?? [];
   const deletes = change.deletes ?? [];
   if (!Array.isArray(upserts) || !upserts.every(isPlainObject))
@@ -418,29 +675,39 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
     }
   }
 
+  const limit = LIMITED_WRITES[def.key as StoreKey];
+  if (limit && !wholeModules && ctx.fullStores && !ctx.fullStores.has(def.key) && !change.replace)
+    await enforceLimited(conn, def, limit, label, upserts, upsertIds, deleteIds);
+
   if (change.replace) {
-    if (wholeModules) await conn.query(`DELETE FROM ${q(def.table)}`);
-    else {
-      // Without the restore/reset permission `replace` must never overwrite or clear what is
-      // stored: it is only the very first save of a module (nothing saved, nothing in the table).
-      const [state] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM store_state WHERE store = ?`, [
-        def.key,
-      ]);
-      const [stored] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM ${q(def.table)} LIMIT 1`);
-      if (state.length || stored.length) {
-        throw new ForbiddenError(
-          `You don't have permission to replace everything in ${label}. Nothing was saved.`,
-          "replace_forbidden",
-        );
-      }
+    // Without the restore/reset permission `replace` must never overwrite or clear what is
+    // stored: it is only the very first save of a module (nothing saved, nothing in the table).
+    const [state] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM store_state WHERE store = ?`, [def.key]);
+    const [stored] = await conn.query<RowDataPacket[]>(`SELECT 1 FROM ${q(def.table)} LIMIT 1`);
+    const holdsData = state.length > 0 || stored.length > 0;
+    if (holdsData && !wholeModules) {
+      throw new ForbiddenError(
+        `You don't have permission to replace everything in ${label}. Nothing was saved.`,
+        "replace_forbidden",
+      );
+    }
+    if (holdsData && !reauthed) throw reauthRequired(`replace everything in ${label}`);
+    if (wholeModules) {
+      // Records that arrive with only the stand-in for their file must get the stored file back:
+      // read it before the table is emptied, and write it again with the record.
+      await restoreStandIns(conn, def, upserts);
+      await conn.query(`DELETE FROM ${q(def.table)}`);
     }
   }
+
+  // Somebody else changed or created one of these records since this client loaded it?
+  if (!change.replace) await checkVersions(conn, def, label, upsertIds, change);
 
   // What the records held before this save (the activity log keeps it).
   const detail = change.replace ? {} : await describeChanges(conn, def, upserts, deleteIds);
 
   // Deleting every record in one request is "Clear module" — the same power as `replace`.
-  const guardWipe = !wholeModules && deleteIds.length >= MASS_DELETE_MIN;
+  const guardWipe = deleteIds.length >= MASS_DELETE_MIN;
   const before = guardWipe ? await countRows(conn, def.table) : 0;
   let deleted = 0;
   for (const batch of chunks(deleteIds, BATCH_IDS)) {
@@ -450,10 +717,13 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
     deleted += res.affectedRows;
   }
   if (guardWipe && before >= MASS_DELETE_MIN && deleted >= before) {
-    throw new ForbiddenError(
-      `You don't have permission to delete every record in ${label} at once (that needs "Clear & factory reset"). Nothing was saved.`,
-      "wipe_forbidden",
-    );
+    if (!wholeModules) {
+      throw new ForbiddenError(
+        `You don't have permission to delete every record in ${label} at once (that needs "Clear & factory reset"). Nothing was saved.`,
+        "wipe_forbidden",
+      );
+    }
+    if (!reauthed) throw reauthRequired(`delete every record in ${label}`);
   }
   let existing = 0;
   for (const batch of chunks(upsertIds, BATCH_IDS)) {
@@ -463,9 +733,11 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
     );
     existing += Number(rows[0].n);
   }
-  await writeListRecords(conn, def, upserts, position);
+  const keepFile = await keepStoredFiles(conn, def, upserts);
+  await writeListRecords(conn, def, upserts, position, keepFile);
   if (order.length && !change.replace) await updatePositions(conn, def, order);
   await markInitialized(conn, def.key);
+  if (upsertIds.length) versionsOut[def.key] = await readVersions(conn, def, upsertIds);
   const summary: ChangeSummary = {
     store: def.key,
     created: upsertIds.length - existing,
@@ -480,7 +752,7 @@ async function syncList(conn: PoolConnection, def: ListStore, change: StoreChang
 
 async function loadList(def: ListStore) {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT * FROM ${q(def.table)} ORDER BY \`position\`, \`id\``,
+    `SELECT ${lightSelect(def)} FROM ${q(def.table)} ORDER BY \`position\`, \`id\``,
   );
   const childrenById = new Map<unknown, Map<string, Rec[]>>();
   for (const f of def.fields) {
@@ -498,7 +770,16 @@ async function loadList(def: ListStore) {
       childrenById.set(parentId, byProp);
     }
   }
-  return rows.map((r) => joinRecord(r, def.fields, childrenById.get(fromDb(def.idType, r.id)) || new Map()));
+  return rows.map((r) =>
+    joinRecord(withStub(def, r), def.fields, childrenById.get(fromDb(def.idType, r.id)) || new Map()),
+  );
+}
+
+async function loadVersions(def: ListStore) {
+  const out: Versions = {};
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT \`id\`, ${VERSION_SQL} AS v FROM ${q(def.table)}`);
+  for (const r of rows) out[String(r.id)] = r.v;
+  return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -535,15 +816,11 @@ async function syncReplace(conn: PoolConnection, def: ReplaceStore, value: unkno
 /* public API                                                           */
 /* ------------------------------------------------------------------ */
 
-async function applyChange(
-  conn: PoolConnection,
-  change: StoreChange,
-  wholeModules: boolean,
-): Promise<ChangeSummary> {
+async function applyChange(conn: PoolConnection, change: StoreChange, ctx: SaveContext): Promise<ChangeSummary> {
   if (!isPlainObject(change)) throw new BadRequestError("each change must be an object");
   const def = STORE_BY_KEY.get(change.store);
   if (!def) throw new BadRequestError(`unknown module ${JSON.stringify(change.store)}`);
-  if (def.kind === "list") return syncList(conn, def, change, wholeModules);
+  if (def.kind === "list") return syncList(conn, def, change, ctx);
   if (def.kind === "single") return syncSingle(conn, def, change.value);
   return syncReplace(conn, def, change.value);
 }
@@ -560,9 +837,14 @@ export async function loadAll(access: AccessMap = ALL_ACCESS) {
   const [state] = await pool.query<RowDataPacket[]>(`SELECT store FROM store_state`);
   const saved = new Set(state.map((r) => r.store as string));
   const stores: Rec = {};
+  // Version of every record, so a save can tell whether someone else changed it meanwhile.
+  const versions: Record<string, Versions> = {};
   for (const def of STORES) {
     if (!saved.has(def.key) || !access[def.key as StoreKey]) continue;
-    if (def.kind === "list") stores[def.key] = await loadList(def);
+    if (def.kind === "list") {
+      stores[def.key] = await loadList(def);
+      versions[def.key] = await loadVersions(def);
+    }
     else if (def.kind === "single") {
       const [rows] = await pool.query<RowDataPacket[]>(`SELECT * FROM ${q(def.table)} WHERE \`id\` = 1`);
       if (rows.length) stores[def.key] = joinRecord(rows[0], def.fields, new Map());
@@ -573,7 +855,7 @@ export async function loadAll(access: AccessMap = ALL_ACCESS) {
       stores[def.key] = rows.map((r) => joinRecord(r, def.fields, new Map()));
     }
   }
-  return { initialized, stores, access };
+  return { initialized, stores, access, versions };
 }
 
 function checkWritable(access: AccessMap, store: unknown) {
@@ -596,15 +878,23 @@ export async function saveChanges(
   changes: unknown,
   actor: Actor | null = null,
   access: AccessMap = ALL_ACCESS,
-  { wholeModules = false }: { wholeModules?: boolean } = {},
+  {
+    wholeModules = false,
+    reauthed = false,
+    fullStores,
+  }: { wholeModules?: boolean; reauthed?: boolean; fullStores?: ReadonlySet<string> } = {},
 ) {
   if (!Array.isArray(changes) || !changes.length)
     throw new BadRequestError("changes must be a non-empty list");
   for (const change of changes) checkWritable(access, isPlainObject(change) ? change.store : undefined);
-  await withTransaction(async (conn) => {
+  return withTransaction(async (conn) => {
     const summaries: ChangeSummary[] = [];
-    for (const change of changes) summaries.push(await applyChange(conn, change as StoreChange, wholeModules));
+    const versions: Record<string, Versions> = {};
+    const ctx: SaveContext = { wholeModules, reauthed, access, fullStores, versions };
+    for (const change of changes) summaries.push(await applyChange(conn, change as StoreChange, ctx));
     await audit(actor, "data.save", summaries.map((s) => s.store).join(", "), { changes: summaries }, conn);
+    // the new version of every record written, for the next save from this client
+    return { ok: true, versions };
   });
 }
 
@@ -628,7 +918,8 @@ export async function importAll(stores: unknown, actor: Actor | null = null) {
             conn,
             def,
             { store: def.key, replace: true, upserts: value, order: value.map((r) => (r as Rec)?.id) },
-            true,
+            // an import into a database that was never set up needs no re-confirmation
+            { wholeModules: true, reauthed: true, access: ALL_ACCESS, versions: {} },
           ),
         );
       } else if (def.kind === "single") imported.push(await syncSingle(conn, def, value));

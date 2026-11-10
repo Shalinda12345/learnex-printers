@@ -13,7 +13,28 @@ import {
   OWNER_ROLE_KEY,
   SCREEN_PERMISSIONS,
   WHOLE_MODULE_PERMISSIONS,
+  LIMITED_WRITES,
+  fullStoresFor,
 } from "@/lib/auth/permissions";
+
+test("PERM-LIMIT a role that does not manage a module only has the limited rights listed for it", () => {
+  // someone with only the POS permission is in charge of none of the limited modules
+  const cashier = fullStoresFor(["pos.use"]);
+  for (const store of Object.keys(LIMITED_WRITES)) assert.equal(cashier.has(store), false, store);
+  // modules without a rule are never limited
+  assert.equal(cashier.has("salesOrders"), true);
+  // the manager of a module has full control of it, and only of it
+  const stock = fullStoresFor(["inventory.manage"]);
+  assert.equal(stock.has("products"), true);
+  assert.equal(stock.has("ledger"), false);
+  assert.equal(fullStoresFor(["accounting.manage"]).has("ledger"), true);
+  assert.equal(fullStoresFor(["cash.manage"]).has("ledger"), true);
+  // every permission a rule names exists, and ids can never be changed
+  for (const [store, rule] of Object.entries(LIMITED_WRITES)) {
+    for (const p of rule.full) assert.ok(PERMISSION_KEYS.includes(p), `${store}: ${p}`);
+    assert.ok(!rule.fields.includes("id"), store);
+  }
+});
 
 test("PERM-1 every permission has a unique key, a group, a label and a description", () => {
   assert.equal(new Set(PERMISSION_KEYS).size, PERMISSION_KEYS.length);

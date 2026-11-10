@@ -1,0 +1,97 @@
+Setting up test database hashil_test ...
+Granted all rights (test database).
+Warning: this MySQL server's max_allowed_packet is 1024 KB, so saving a record with a large attachment (e.g. a photo of a bill) will fail. Set max_allowed_packet=64M in the [mysqld] section of the server's my.ini / my.cnf (XAMPP: C:\xampp\mysql\bin\my.ini) and restart MySQL.
+Database hashil_test was already up to date.
+      · setup screen buttons: Import from Data Folder… | Import from Backup File… | Start with demo data
+      · console: no errors or warnings
+▶ first start and everyday use
+  ✔ UI-1 an empty database shows the one-time setup screen (407.6099ms)
+      · rows per table: {"products":14,"customers":8,"suppliers":7,"sales_orders":10,"raw_materials":45,"ledger":13,"cash_accounts":2,"users":4,"settings":1,"modules_saved":12}
+      · console: no errors or warnings
+  ✔ UI-2 'Start with demo data' opens the app and saves every module to the database (1331.6225ms)
+      · toast: Sale completed — Rs. 6,912 received via Cash. Invoice INV-2462 generated.
+      · sync requests: 1; modules in it: products+salesOrders+ledger
+      · sales_orders: {"id":"SO-1043","invoice":"INV-2462","amount":"6912.000000000000000000000000000000","payment":"Paid","channel":"POS","position":1}
+      · sales_order_items: [{"product_id":4,"name":"HP 12A Toner Cartridge","qty":"2.000000000000000000000000000000","price":"3200.000000000000000000000000000000"}]
+      · sales_order_payments: [{"date":"2026-11-10","amount":"6912.000000000000000000000000000000"}]
+      · new ledger_entries: {"id":"TXN-8822","description":"POS sale — INV-2462 (Walk-in Customer)","type":"Income","amount":"6912.000000000000000000000000000000","kind":"revenue"}
+      · new ledger_entries: {"id":"TXN-8823","description":"Cost of goods sold — INV-2462","type":"Expense","amount":"4200.000000000000000000000000000000","kind":"cogs"}
+      · products.stock for HP 12A: 65 -> 63
+      · console: no errors or warnings
+  ✔ UI-3 a POS sale saves order, line items, payment, ledger and stock together in ONE request (1456.2395ms)
+      · sent: 1 upsert(s) [Canon PIXMA G3010], 0 delete(s); price in DB: 22000.000000000000000000000000000000
+      · console: no errors or warnings
+  ✔ UI-4 editing one product sends only that product, not the whole list (761.7645ms)
+      · badge during save: "Saving…", after: "Saved"
+      · console: no errors or warnings
+  ✔ UI-5 the top-bar badge shows 'Saving…' while saving, then 'Saved' (3241.1609ms)
+      · badge: "Not saved", tooltip ends with: "Database error: simulated outage"
+      · business_name in DB during outage: "LEARNEX Badge Test"; after recovery: "LEARNEX Retry Test"
+      · expected console errors from the simulated outage: 2
+  ✔ UI-6 if a save fails the badge shows 'Not saved' with the reason, then retries until it is saved (1592.7298ms)
+      · dialog shown on close: beforeunload; user chose to stay
+      · console: no errors or warnings
+  ✔ UI-7 closing the tab with unsaved changes asks for confirmation (1190.7687ms)
+      · after reload: SO-1043 is listed in Sales Orders; business name field = "LEARNEX Unload Test"
+      · console: no errors or warnings
+  ✔ UI-8 after wiping browser storage and reloading, everything comes back from MySQL (511.3329ms)
+      · backup file: learnex_backup_2026-11-10_2322.html, modules: 12
+      · console: no errors or warnings
+  ✔ UI-9 Download Backup contains exactly what is in the database (209.9496ms)
+      · rows per table after restore: {"products":15,"customers":8,"suppliers":7,"sales_orders":11,"raw_materials":45,"ledger":15,"cash_accounts":2,"users":4,"settings":1,"modules_saved":12}
+      · restored product: {"name":"Smoke Test Printer","sku":"SMK-001","price":"1500.000000000000000000000000000000"}
+      · console: no errors or warnings
+  ✔ UI-10 Restore from Backup replaces the data and saves it to the database (1150.8929ms)
+      · customers: 8 -> 0; products: 15 -> 15; sales_orders: 11 -> 11
+      · console: no errors or warnings
+  ✔ UI-11 'Clear a Specific Module' empties only that table (3000.83ms)
+      · rows per table after reset: {"products":14,"customers":8,"suppliers":7,"sales_orders":10,"raw_materials":45,"ledger":13,"cash_accounts":2,"users":4,"settings":1,"modules_saved":12} | business_name: LEARNEX Printers & Distributors
+      · console: no errors or warnings
+  ✔ UI-12 Factory Reset restores the demo data in the database (3007.6336ms)
+✔ first start and everyday use (19318.6997ms)
+      · error screen shown with: "Database error: simulated"; after Try Again the app opened; saves sent while offline: 0
+▶ when the database can't be reached
+  ✔ UI-13 the app shows 'Can't reach the database' (never demo data) and recovers with Try Again (817.39ms)
+      · error screen: "Database error: the database server can't be reached. Check that MySQL is running."
+  ✔ UI-14 with MySQL actually unreachable, the error screen explains the cause in plain words (without its address) (564.1922ms)
+✔ when the database can't be reached (1381.8627ms)
+      · review: Products & Inventory 15 record(s)
+      · review: Customers 8 record(s)
+      · review: Suppliers 7 record(s)
+      · review: Sales Orders 11 record(s)
+      · review: Purchase Orders 0 record(s)
+      · review: Raw Materials 45 record(s)
+      · review: Raw Material Usage 0 record(s)
+      · review: Delivery Runs 0 record(s)
+      · review: Accounting Ledger 15 record(s)
+      · review: Cash & Bank Accounts 2 record(s)
+      · review: Business Settings included
+      · review: Users & Roles 4 record(s)
+      · rows per table: {"products":15,"customers":8,"suppliers":7,"sales_orders":11,"raw_materials":45,"ledger":15,"cash_accounts":2,"users":4,"settings":1,"modules_saved":12}
+      · console: no errors or warnings
+▶ one-time import of existing data
+  ✔ UI-15 import from a backup file (from the original HTML app) (1479.614ms)
+      · review: Products & Inventory 2 record(s)
+      · review: Business Settings included
+      · products in DB: Browser Product A, Browser Product B | settings: {"business_name":"From Browser","tax_rate":"5.000000000000000000000000000000"} | customers (not in source, so demo): 8
+      · console: no errors or warnings
+  ✔ UI-16 import from this browser's old storage (only offered when it exists) (1771.9251ms)
+      · Found in the folder "Shop PC Data": 12 modules
+      · all 12 modules in the database match the folder file
+      · console: no errors or warnings
+  ✔ UI-17 import from a data folder (learnex-data.json written by the folder version) (1390.3266ms)
+      · message: "No learnex-data.json found in "Empty Folder"."; database initialized: false
+  ✔ UI-18 a folder without learnex-data.json is explained, nothing is imported (763.2999ms)
+      · message: "This file doesn't look like a LEARNEX backup."; database initialized: false
+  ✔ UI-19 an invalid backup file is explained, nothing is imported (763.1293ms)
+✔ one-time import of existing data (6168.8086ms)
+ℹ tests 19
+ℹ suites 3
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27467.6286
+
+Full log: test-results\db-tests.log
