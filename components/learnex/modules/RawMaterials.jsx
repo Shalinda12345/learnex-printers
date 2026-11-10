@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Field, Modal, StatCard, inputCls } from "@/components/learnex/ui";
-import { MinusCircle, Pencil, Plus, Save, Search, Trash2 } from "@/components/learnex/icons";
+import { EmptyState, Field, Modal, SearchInput, StatCard, inputCls } from "@/components/learnex/ui";
+import { MinusCircle, Pencil, Plus, Save, Trash2 } from "@/components/learnex/icons";
 import { RAW_MATERIAL_CATEGORIES } from "@/lib/learnex/seed";
 import { fmtDate, money, nextNumId, nextSeqId, numVal, round2, round6, todayISO } from "@/lib/learnex/utils";
 
@@ -73,7 +73,7 @@ export function RawMaterialModal({ onClose, onSave, initial, dark, cardBg, subTe
                 ))}
               </select>
             ) : (
-              <input
+              <input aria-label="Supplier name"
                 value={form.supplier}
                 onChange={set("supplier")}
                 className={inputCls(inputBg)}
@@ -153,7 +153,7 @@ export function RawMaterialModal({ onClose, onSave, initial, dark, cardBg, subTe
         </Field>
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+          className="btn btn-primary btn-block"
         >
           <Save size={15} /> {initial ? "Save Changes" : "Add Raw Material"}
         </button>
@@ -175,8 +175,9 @@ export function RawMaterials({
   suppliers,
   currentUser,
   setLedger,
+  seed,
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(seed || "");
   const [category, setCategory] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -313,7 +314,7 @@ export function RawMaterials({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Raw Materials</h1>
+          <h2 className="text-xl font-bold">Raw Materials</h2>
           <p className={`text-sm ${subText}`}>
             {
               "Purchased materials are held as an asset. Recording usage moves stock only — the cost reaches the Profit or Loss statement as Cost of Goods Sold, when the finished goods are sold."
@@ -326,7 +327,7 @@ export function RawMaterials({
               setEditing(null);
               setModalOpen(true);
             }}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors"
+            className="btn btn-primary"
           >
             <Plus size={16} />
             {" Add Raw Material"}
@@ -352,16 +353,8 @@ export function RawMaterials({
       </div>
       <div className={`rounded-2xl border ${cardBg} shadow-sm overflow-hidden`}>
         <div className="p-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border w-full sm:w-72 ${inputBg}`}>
-            <Search size={15} className={subText} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name or supplier..."
-              className="bg-transparent outline-none text-sm w-full"
-            />
-          </div>
-          <select
+          <SearchInput value={query} onChange={setQuery} placeholder="Search name or supplier..." inputBg={inputBg} subText={subText} className="w-full sm:w-72" />
+          <select aria-label="Filter by category"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             className={`text-xs px-3 py-2 rounded-xl border ${inputBg}`}
@@ -401,14 +394,14 @@ export function RawMaterials({
                   <td className={`py-3 px-2 ${subText}`}>{m.unit}</td>
                   <td className="py-3 px-2">{m.purchaseQty}</td>
                   <td className="py-3 px-2 font-medium">{m.availableQty}</td>
-                  <td className="py-3 px-2">
+                  <td className="py-3 px-2 whitespace-nowrap">
                     {money(m.costPrice)}
                     {m.lastPurchaseCost !== undefined &&
                     round2(m.lastPurchaseCost) !== round2(m.costPrice) ? (
                       <p className={`text-xs ${subText}`}>{`last bought at ${money(m.lastPurchaseCost)}`}</p>
                     ) : null}
                   </td>
-                  <td className="py-3 px-2 font-medium">
+                  <td className="py-3 px-2 font-medium whitespace-nowrap">
                     {money(round2(numVal(m.costPrice, 0) * numVal(m.availableQty, 0)))}
                   </td>
                   <td className={`py-3 px-2 ${subText}`}>{m.batchNumber || "—"}</td>
@@ -420,12 +413,16 @@ export function RawMaterials({
                           setModalOpen(true);
                         }}
                         className={`w-7 h-7 rounded-lg flex items-center justify-center ${dark ? "hover:bg-slate-800 text-slate-300" : "hover:bg-slate-100 text-slate-500"}`}
+                        title="Edit"
+                        aria-label="Edit"
                       >
                         <Pencil size={13} />
                       </button>
                       <button
                         onClick={() => deleteMaterial(m)}
                         className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500 hover:bg-red-50"
+                        title="Delete"
+                        aria-label="Delete"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -435,8 +432,10 @@ export function RawMaterials({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={10} className={`text-center py-10 text-sm ${subText}`}>
-                    No raw materials yet. Add one, or record a Purchase Order to bring materials in.
+                  <td colSpan={10} className="py-2">
+                    <EmptyState compact subText={subText} title="No raw materials yet.">
+                      Add one, or record a Purchase Order to bring materials in.
+                    </EmptyState>
                   </td>
                 </tr>
               )}
@@ -503,7 +502,7 @@ export function RawMaterials({
             <button
               type="submit"
               disabled={rawMaterials.length === 0}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-md shadow-blue-900/20 transition-colors disabled:opacity-40 h-[42px]"
+              className="btn btn-primary h-[42px]"
             >
               <MinusCircle size={15} />
               {" Record Usage"}
@@ -520,22 +519,14 @@ export function RawMaterials({
               <p className={`text-xs ${subText}`}>Every recorded use of a raw material</p>
             </div>
             <div className="flex flex-wrap gap-2 items-center">
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border w-56 ${inputBg}`}>
-                <Search size={15} className={subText} />
-                <input
-                  value={usageQuery}
-                  onChange={(e) => setUsageQuery(e.target.value)}
-                  placeholder="Search material or user..."
-                  className="bg-transparent outline-none text-sm w-full"
-                />
-              </div>
-              <input
+              <SearchInput value={usageQuery} onChange={setUsageQuery} placeholder="Search material or user..." inputBg={inputBg} subText={subText} className="w-56" />
+              <input aria-label="Usage from date"
                 type="date"
                 value={usageFrom}
                 onChange={(e) => setUsageFrom(e.target.value)}
                 className={`text-xs px-3 py-2 rounded-xl border ${inputBg}`}
               />
-              <input
+              <input aria-label="Usage to date"
                 type="date"
                 value={usageTo}
                 onChange={(e) => setUsageTo(e.target.value)}
@@ -564,7 +555,7 @@ export function RawMaterials({
                     key={u.id}
                     className={`border-t ${dark ? "border-slate-800" : "border-slate-100"} ${hoverRow} transition-colors`}
                   >
-                    <td className={`py-3 px-5 ${subText}`}>{fmtDate(u.date)}</td>
+                    <td className={`py-3 px-5 ${subText} whitespace-nowrap`}>{fmtDate(u.date)}</td>
                     <td className="py-3 px-2 font-medium">{u.materialName}</td>
                     <td className="py-3 px-2">{u.qtyUsed}</td>
                     <td className="py-3 px-2">{u.remainingQty}</td>
@@ -585,9 +576,9 @@ export function RawMaterials({
                 ))}
                 {filteredUsage.length === 0 && (
                   <tr>
-                    <td colSpan={7} className={`text-center py-10 text-sm ${subText}`}>
-                      No usage recorded yet.
-                    </td>
+                    <td colSpan={7} className="py-2">
+                    <EmptyState compact subText={subText} title="No usage recorded yet." />
+                  </td>
                   </tr>
                 )}
               </tbody>

@@ -35,7 +35,7 @@ export interface AuthUser {
 }
 
 /** Was this request made over HTTPS (directly or via a proxy that says so)? */
-function isHttps(request: Request) {
+export function isHttps(request: Request) {
   const forwarded = request.headers.get("x-forwarded-proto");
   if (forwarded) return forwarded.split(",")[0].trim() === "https";
   return new URL(request.url).protocol === "https:";

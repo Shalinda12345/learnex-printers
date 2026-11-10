@@ -12,14 +12,15 @@ import {
 import { getMe, logout } from "@/lib/learnex/auth-client";
 import { ForcedPasswordChangeScreen, LoginScreen, SetupOwnerScreen } from "@/components/learnex/AuthScreens";
 import {
+  GateButton,
+  GateError,
+  GateHeading,
+  GateLink,
+  GateLoading,
   GateShell,
-  bodyStyle,
-  buttonStyle,
-  errorStyle,
-  headingStyle,
-  linkStyle,
-  secondaryButtonStyle,
+  GateText,
 } from "@/components/learnex/gate";
+import { AlertTriangle, Database, Download, Lock } from "@/components/learnex/icons";
 
 /* =====================================================================
    BOOT SEQUENCE
@@ -142,15 +143,13 @@ export default function BootGate() {
   if (phase.name === "offline") {
     return (
       <GateShell>
-        <h2 style={headingStyle}>Can&apos;t reach the database</h2>
-        <p style={bodyStyle}>
+        <GateHeading icon={AlertTriangle}>Can&apos;t reach the database</GateHeading>
+        <GateText>
           LEARNEX ERP couldn&apos;t load your data. Check that MySQL is running and that the app&apos;s
           DATABASE_URL is correct, then try again.
-        </p>
-        <p style={errorStyle}>{phase.error}</p>
-        <button style={buttonStyle} onClick={() => start()}>
-          Try Again
-        </button>
+        </GateText>
+        <GateError>{phase.error}</GateError>
+        <GateButton onClick={() => start()}>Try Again</GateButton>
       </GateShell>
     );
   }
@@ -158,17 +157,13 @@ export default function BootGate() {
   if (phase.name === "notReady") {
     return (
       <GateShell>
-        <h2 style={headingStyle}>Not set up yet</h2>
-        <p style={bodyStyle}>
+        <GateHeading icon={Lock}>Not set up yet</GateHeading>
+        <GateText>
           The business data hasn&apos;t been set up yet. Ask the owner to sign in and finish the setup, then
           try again.
-        </p>
-        <button style={buttonStyle} onClick={() => start()}>
-          Try Again
-        </button>
-        <button style={linkStyle} onClick={signOut}>
-          Sign out
-        </button>
+        </GateText>
+        <GateButton onClick={() => start()}>Try Again</GateButton>
+        <GateLink onClick={signOut}>Sign out</GateLink>
       </GateShell>
     );
   }
@@ -176,35 +171,25 @@ export default function BootGate() {
   if (phase.name === "review") {
     return (
       <GateShell>
-        <h2 style={headingStyle}>Import this data?</h2>
-        <p style={bodyStyle}>Found in {phase.source}:</p>
-        <table
-          style={{
-            width: "100%",
-            fontSize: 13,
-            color: "#334155",
-            marginBottom: 16,
-            borderCollapse: "collapse",
-          }}
-        >
-          <tbody>
-            {BACKUP_MODULES.filter((m) => phase.stores[m.key] !== undefined).map((m) => (
-              <tr key={m.key}>
-                <td style={{ padding: "3px 0" }}>{m.label}</td>
-                <td style={{ padding: "3px 0", textAlign: "right", color: "#64748b" }}>
-                  {countLabel(m.key, phase.stores[m.key])}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p style={bodyStyle}>Modules not listed start with the demo data.</p>
-        <button style={buttonStyle} onClick={() => runImport(phase.stores)}>
-          Import into Database
-        </button>
-        <button style={linkStyle} onClick={() => setPhase({ name: "import" })}>
-          Back
-        </button>
+        <GateHeading icon={Download}>Import this data?</GateHeading>
+        <GateText>Found in {phase.source}:</GateText>
+        <div className="rounded-xl border border-slate-200 mb-5 overflow-hidden">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-slate-100">
+              {BACKUP_MODULES.filter((m) => phase.stores[m.key] !== undefined).map((m) => (
+                <tr key={m.key}>
+                  <td className="px-4 py-2 text-slate-700">{m.label}</td>
+                  <td className="px-4 py-2 text-right text-slate-500 tabular-nums">
+                    {countLabel(m.key, phase.stores[m.key])}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <GateText className="!mt-0">Modules not listed start with the demo data.</GateText>
+        <GateButton onClick={() => runImport(phase.stores)}>Import into Database</GateButton>
+        <GateLink onClick={() => setPhase({ name: "import" })}>Back</GateLink>
       </GateShell>
     );
   }
@@ -214,26 +199,31 @@ export default function BootGate() {
     const hasBrowserData = Object.keys(browserStores).length > 0;
     return (
       <GateShell>
-        <h2 style={headingStyle}>Set up your database</h2>
-        <p style={bodyStyle}>
+        <GateHeading icon={Database}>Set up your database</GateHeading>
+        <GateText>
           The database is empty. Bring in the data from your previous LEARNEX setup, or start with the demo
           data. This is only asked once.
-        </p>
-        {phase.error && <p style={errorStyle}>{phase.error}</p>}
-        {hasBrowserData && (
-          <button style={buttonStyle} onClick={() => review("this browser's storage", browserStores)}>
-            Import from This Browser
-          </button>
-        )}
-        {typeof window.showDirectoryPicker === "function" && (
-          <button style={hasBrowserData ? secondaryButtonStyle : buttonStyle} onClick={fromFolder}>
-            Import from Data Folder…
-          </button>
-        )}
-        <button style={secondaryButtonStyle} onClick={() => fileInput.current && fileInput.current.click()}>
-          Import from Backup File…
-        </button>
-        <input
+        </GateText>
+        <GateError>{phase.error}</GateError>
+        <div className="space-y-2.5">
+          {hasBrowserData && (
+            <GateButton onClick={() => review("this browser's storage", browserStores)}>
+              Import from This Browser
+            </GateButton>
+          )}
+          {typeof window.showDirectoryPicker === "function" && (
+            <GateButton variant={hasBrowserData ? "secondary" : "primary"} onClick={fromFolder}>
+              Import from Data Folder…
+            </GateButton>
+          )}
+          <GateButton
+            variant={hasBrowserData || typeof window.showDirectoryPicker === "function" ? "secondary" : "primary"}
+            onClick={() => fileInput.current && fileInput.current.click()}
+          >
+            Import from Backup File…
+          </GateButton>
+        </div>
+        <input aria-label="Backup file to import"
           ref={fileInput}
           type="file"
           accept=".html,.json"
@@ -244,16 +234,10 @@ export default function BootGate() {
             if (file) fromBackupFile(file);
           }}
         />
-        <button style={linkStyle} onClick={() => runImport({})}>
-          Start with demo data
-        </button>
+        <GateLink onClick={() => runImport({})}>Start with demo data</GateLink>
       </GateShell>
     );
   }
 
-  return (
-    <GateShell>
-      <p style={{ color: "#64748b", fontSize: 14, margin: 0, textAlign: "center" }}>Loading your data…</p>
-    </GateShell>
-  );
+  return <GateLoading />;
 }

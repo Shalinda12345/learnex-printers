@@ -210,6 +210,14 @@ export const PERMISSION_KEYS = PERMISSIONS.map((p) => p.key);
 const BY_KEY = new Map(PERMISSIONS.map((p) => [p.key, p]));
 export const isPermission = (key: string) => BY_KEY.has(key);
 
+/**
+ * Holding either of these lets someone replace or empty a whole module in one
+ * request (restore a backup, "Clear a Specific Module"). Write access to a
+ * module is not enough: without one of them records can only be added, changed
+ * and deleted a few at a time.
+ */
+export const WHOLE_MODULE_PERMISSIONS = ["data.restore", "data.reset"] as const;
+
 export type StoreAccess = "read" | "write";
 
 /** Which modules a set of permissions may load ("read") or also save ("write"). */

@@ -441,21 +441,21 @@ export function Reports({
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">Reports</h1>
+          <h2 className="text-xl font-bold">Reports</h2>
           <p className={`text-sm ${subText}`}>
             Generate and export business reports as CSV (Excel-ready) or PDF. Leave the dates blank for
             all-time figures with no limit.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input
+          <input aria-label="From date"
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
             className={`text-xs px-3 py-2 rounded-xl border ${dark ? "bg-slate-800 border-slate-700 text-slate-100" : "bg-white border-slate-200"}`}
           />
           <span className={`text-xs ${subText}`}>to</span>
-          <input
+          <input aria-label="To date"
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}

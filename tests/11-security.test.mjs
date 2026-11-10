@@ -2,15 +2,15 @@
 //
 //   node --env-file=.env scripts/test-db.mjs 11-security        (rebuild first if app code changed)
 //
-// Unlike the feature tests, every test here asserts the SECURE behaviour:
-// it PASSES when the defence holds and FAILS while the weakness exists, with the
-// evidence in the failure message. A red test is an open finding, not a broken test.
-// For that reason this file is deliberately NOT in the default list of
-// scripts/test-db.mjs — add "11-security" there once the open findings are fixed.
+// Unlike the feature tests, every test here asserts the SECURE behaviour: it PASSES when
+// the defence holds and FAILS when a weakness is (back) in the app, with the evidence in
+// the failure message. All of them pass today, so this file is part of the default run.
+// A red test here is a security regression, not a broken test.
 //
-// Everything runs against the throw-away test database and the test servers
-// (:3311 normal, :3312 database down). A tiny "attacker" web server on another
-// origin (127.0.0.1) is used for the real-browser cross-site tests.
+// Everything runs against the throw-away test database and the test servers started by
+// scripts/test-db.mjs (a normal one, one with the database down, one with the sign-in rate
+// limit on). A tiny "attacker" web server on another origin (127.0.0.1) is used for the
+// real-browser cross-site tests.
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -20,6 +20,7 @@ import { spawnSync } from "node:child_process";
 import {
   BASE,
   DEAD_DB_BASE,
+  THROTTLED_BASE,
   Client,
   OWNER,
   STAFF_PASSWORD,
@@ -385,42 +386,50 @@ describe("B. Authentication", () => {
   test("SEC-14 [A07] the 5-attempt lockout holds when guesses arrive in parallel", async () => {
     await staffWithRoleId(owner, "sec-race", ids.sales);
     const N = 30;
-    const burst = (lastIsCorrect) =>
+    const wrongBurst = (n) =>
       Promise.all(
-        Array.from({ length: N }, (_, i) =>
-          new Client().post("/api/auth/login", {
-            username: "sec-race",
-            password: lastIsCorrect && i === N - 1 ? STAFF_PASSWORD : `wrong-guess-${i}`,
-          }),
+        Array.from({ length: n }, (_, i) =>
+          new Client().post("/api/auth/login", { username: "sec-race", password: `wrong-guess-${i}` }),
         ),
       );
     const state = () => one("SELECT failed_login_count AS n, locked_until FROM auth_users WHERE username = 'sec-race'");
-    // Burst 1: nothing but wrong passwords.
+    // Burst 1: nothing but wrong passwords, all at the same moment.
     await unlock("sec-race");
-    const wrong = await burst(false);
+    const wrong = await wrongBurst(N);
     const afterWrong = await state();
     const evaluated = wrong.filter((g) => g.status === 401).length;
-    // Burst 2: the same, but one guess is the correct password.
+    // Burst 2: the right password turns up while 29 wrong ones are still being processed.
+    // (Sent after a short pause so it is certainly guess number 30, not one of the first five.)
     await unlock("sec-race");
-    const mixed = await burst(true);
-    const accepted = mixed[N - 1].status === 200;
+    const pending = wrongBurst(N - 1);
+    await new Promise((r) => setTimeout(r, 150));
+    const right = await new Client().post("/api/auth/login", { username: "sec-race", password: STAFF_PASSWORD });
+    await pending;
     await unlock("sec-race");
+    const accepted = right.status === 200;
     log(`burst of ${N} wrong guesses -> ${JSON.stringify(tally(wrong.map((g) => g.status)))}; failed_login_count in DB = ${afterWrong.n}; locked = ${!!afterWrong.locked_until}`);
-    log(`burst of ${N - 1} wrong guesses + the correct password -> the correct password was ${accepted ? "ACCEPTED" : "refused"}`);
+    log(`the right password sent after 29 wrong ones -> ${right.status} (${accepted ? "ACCEPTED" : "refused"})`);
     assert.ok(
       evaluated <= 5 && !accepted,
-      `${evaluated} of ${N} parallel wrong guesses were checked against the password (limit is 5); the counter only reached ${afterWrong.n} and the account was ${afterWrong.locked_until ? "locked" : "NOT locked"}; a correct guess hidden in the burst ${accepted ? "got in" : "was refused"}`,
+      `${evaluated} of ${N} parallel wrong guesses were checked against the password (limit is 5); the counter only reached ${afterWrong.n} and the account was ${afterWrong.locked_until ? "locked" : "NOT locked"}; a right password sent after 29 wrong ones ${accepted ? "got in" : "was refused"}`,
     );
   });
 
-  test("SEC-14b [A04/A07] password spraying is slowed: 60 rapid sign-ins for 60 different usernames are not all processed at full speed", async () => {
+  test("SEC-14b [A04/A07] password spraying is slowed: 60 rapid sign-ins for 60 different usernames are mostly refused", async () => {
+    // Server :3313 runs with the rate limit on (10 per client a minute); the normal test servers have it off.
     const N = 60;
     const { value: answers, ms } = await timed(() =>
-      Promise.all(Array.from({ length: N }, (_, i) => new Client().post("/api/auth/login", { username: `spray-${i}`, password: "password1" }))),
+      Promise.all(
+        Array.from({ length: N }, (_, i) =>
+          new Client(THROTTLED_BASE).post("/api/auth/login", { username: `spray-${i}`, password: "password1" }, { "x-forwarded-for": "10.9.9.9" }),
+        ),
+      ),
     );
     const statuses = tally(answers.map((a) => a.status));
-    log(`${N} rapid sign-ins from one client -> ${JSON.stringify(statuses)} in ${ms} ms`);
-    assert.ok(answers.some((a) => a.status === 429 || a.status === 503), `no per-client throttling: all ${N} attempts were processed (${JSON.stringify(statuses)})`);
+    const processed = answers.filter((a) => a.status === 401).length;
+    log(`${N} rapid sign-ins from one client -> ${JSON.stringify(statuses)} in ${ms} ms (only ${processed} were actually checked)`);
+    assert.ok(answers.some((a) => a.status === 429), `no per-client throttling: all ${N} attempts were processed (${JSON.stringify(statuses)})`);
+    assert.ok(processed <= 10, `${processed} attempts were checked; the limit is 10 a minute`);
   });
 
   test("SEC-14c [A04/A09] an anonymous client cannot park large amounts of its own data in the activity log via failed sign-ins", async () => {
@@ -445,19 +454,23 @@ describe("B. Authentication", () => {
     assert.ok(Math.abs(mu - mk) <= Math.max(40, mu * 0.35), `timing differs: ${mu} ms vs ${mk} ms`);
   });
 
-  test("SEC-16 [A07] a locked account looks the same as an unknown one (no username enumeration)", async () => {
+  test("SEC-16 [A07] a real account and an unknown name give the same answers attempt after attempt (no username enumeration)", async () => {
     await staffWithRoleId(owner, "sec-lock", ids.sales);
-    for (let i = 0; i < 5; i++) await new Client().post("/api/auth/login", { username: "sec-lock", password: `bad-${i}` });
-    const locked = await new Client().post("/api/auth/login", { username: "sec-lock", password: "bad-again" });
-    const ghost = await new Client().post("/api/auth/login", { username: "sec-ghost-user", password: "bad-again" });
+    // What an attacker does to test whether a name exists: keep guessing and watch for the lock.
+    const answersFor = async (name) => {
+      const out = [];
+      for (let i = 0; i < 7; i++) {
+        const r = await new Client().post("/api/auth/login", { username: name, password: `bad-${i}` });
+        out.push({ status: r.status, error: r.body?.error });
+      }
+      return out;
+    };
+    const real = await answersFor("sec-lock");
+    const ghost = await answersFor("sec-ghost-user");
     await unlock("sec-lock");
-    log(`locked account -> ${locked.status} "${locked.body?.error}"`);
-    log(`unknown user   -> ${ghost.status} "${ghost.body?.error}"`);
-    assert.deepEqual(
-      { status: locked.status, error: locked.body?.error },
-      { status: ghost.status, error: ghost.body?.error },
-      "the 'too many attempts' answer tells an attacker the username exists",
-    );
+    log(`real account    -> ${real.map((a) => a.status).join(" ")}`);
+    log(`unknown name    -> ${ghost.map((a) => a.status).join(" ")}`);
+    assert.deepEqual(ghost, real, "the 'too many attempts' answer tells an attacker the username exists");
   });
 
   test("SEC-17 [A07] session fixation: an attacker-chosen cookie is never adopted; sign-in issues a new token", async () => {
@@ -588,20 +601,24 @@ describe("C. Access control", () => {
     assert.equal(out.status, 200);
   });
 
-  test("SEC-23 [A01] a role without 'Clear & factory reset' cannot wipe a whole module (replace) through /sync", async () => {
+  test("SEC-23 [A01] a role without 'Clear & factory reset' cannot wipe a whole module through /sync (replace, or deleting every record at once)", async () => {
     await loadStores(shopFixture());
-    await owner.post("/api/learnex/sync", {
-      changes: [{ store: "ledger", upserts: [{ id: "TXN-SEC-1", date: "2026-02-01", desc: "Rent", type: "Expense", category: "Rent", amount: 100 }], order: ["TXN-SEC-1"] }],
-    });
-    const before = (await one("SELECT count(*) AS n FROM ledger_entries")).n;
-    const wipe = await cashier.post("/api/learnex/sync", { changes: [{ store: "ledger", replace: true, upserts: [], order: [] }] });
-    const wipeProducts = await cashier.post("/api/learnex/sync", { changes: [{ store: "products", replace: true, upserts: [], order: [] }] });
-    const after = (await one("SELECT count(*) AS n FROM ledger_entries")).n;
-    const productsLeft = (await one("SELECT count(*) AS n FROM products")).n;
-    log(`Sales & POS role: replace ledger -> ${wipe.status} (rows ${before} -> ${after}); replace products -> ${wipeProducts.status} (rows left ${productsLeft})`);
+    const entries = Array.from({ length: 12 }, (_, i) => ({ id: `TXN-SEC-${i + 1}`, date: "2026-02-01", desc: `Rent ${i}`, type: "Expense", category: "Rent", amount: 100 }));
+    await owner.post("/api/learnex/sync", { changes: [{ store: "ledger", upserts: entries, order: entries.map((e) => e.id) }] });
+    const count = async (t) => (await one(`SELECT count(*) AS n FROM ${t}`)).n;
+    const before = { ledger: await count("ledger_entries"), products: await count("products") };
+    const sync = (change) => cashier.post("/api/learnex/sync", { changes: [change] });
+    const replaceLedger = await sync({ store: "ledger", replace: true, upserts: [], order: [] });
+    const replaceProducts = await sync({ store: "products", replace: true, upserts: [], order: [] });
+    const deleteAll = await sync({ store: "ledger", deletes: entries.map((e) => e.id) });
+    const after = { ledger: await count("ledger_entries"), products: await count("products") };
+    log(`Sales & POS role: replace ledger -> ${replaceLedger.status}; replace products -> ${replaceProducts.status}; delete all 12 ledger entries at once -> ${deleteAll.status}`);
+    log(`rows: ledger ${before.ledger} -> ${after.ledger}, products ${before.products} -> ${after.products}`);
     await loadStores(shopFixture());
-    assert.equal(wipe.status, 403, `the cashier emptied the whole accounting ledger (${before} -> ${after} rows) without the data.reset permission`);
-    assert.equal(wipeProducts.status, 403, "the cashier emptied the whole product list");
+    assert.equal(replaceLedger.status, 403, `the cashier emptied the whole accounting ledger (${before.ledger} -> ${after.ledger} rows) without the data.reset permission`);
+    assert.equal(replaceProducts.status, 403, "the cashier emptied the whole product list");
+    assert.equal(deleteAll.status, 403, "the cashier deleted every ledger entry in one request");
+    assert.deepEqual(after, before);
   });
 
   test("SEC-24 [A01] nobody can give themselves or anyone else more power than they hold", async () => {
@@ -628,6 +645,24 @@ describe("C. Access control", () => {
     log(`${attempts.length} escalation attempts, ${allowed.length} not refused; same-level grant -> ${fine.status}`);
     assert.deepEqual(allowed, []);
     assert.equal(fine.status, 200, "granting a role you hold yourself must still work");
+  });
+
+  test("SEC-24b [A01] a user manager cannot reset, disable or edit an account that holds permissions they lack (account takeover)", async () => {
+    const um = await owner.post("/api/roles", { name: "Users only 2", description: "", permissions: ["users.manage"] });
+    const userMgr = await staffWithRoleId(owner, "sec-um2", um.body.id);
+    const victim = await owner.post("/api/user", { username: "sec-victim", name: "Victim", roleIds: [ids.administrator] });
+    const peer = await owner.post("/api/user", { username: "sec-peer", name: "Peer", roleIds: [um.body.id] });
+    const attempts = [
+      ["reset Administrator's password", await userMgr.post(`/api/user/${victim.body.id}/password`, {})],
+      ["disable Administrator", await userMgr.patch(`/api/user/${victim.body.id}`, { status: "disabled" })],
+      ["rename Administrator", await userMgr.patch(`/api/user/${victim.body.id}`, { name: "Hacked" })],
+      ["sign Administrator out", await userMgr.delete(`/api/user/${victim.body.id}/sessions`)],
+    ];
+    const allowed = attempts.filter(([, r]) => r.status !== 403).map(([what, r]) => `${what}: ${r.status}`);
+    const same = await userMgr.post(`/api/user/${peer.body.id}/password`, {});
+    log(`${attempts.length} takeover attempts, ${allowed.length} not refused; same-level reset -> ${same.status}`);
+    assert.deepEqual(allowed, []);
+    assert.equal(same.status, 200, "managing an account with permissions you hold must still work");
   });
 
   test("SEC-25 [A01] extra fields in requests cannot set passwords, owner status or counters (mass assignment)", async () => {
@@ -755,6 +790,10 @@ describe("D. Injection and XSS", () => {
     await new Client().post("/api/auth/login", { username: evilShort, password: "x" }); // lands in the Activity Log
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true, baseURL: BASE });
     await ctx.request.post(`${BASE}/api/auth/login`, { data: { username: OWNER.username, password: OWNER.password } });
+    // remember every Content-Security-Policy violation the browser reports, in every page of this context
+    await ctx.addInitScript(() => {
+      document.addEventListener("securitypolicyviolation", (e) => (window.__csp ||= []).push(e.violatedDirective));
+    });
     const dialogs = [];
     const watch = (pg) => pg.on("dialog", (d) => (dialogs.push(d.message()), d.dismiss().catch(() => {})));
     ctx.on("page", watch);
@@ -823,19 +862,23 @@ describe("D. Injection and XSS", () => {
       await pdf.close();
     }
     await page.waitForTimeout(500);
-    // Positive control: the very same payload inserted as raw HTML MUST be caught by the detector,
-    // otherwise "nothing found" above would prove nothing.
+    // Positive control: the very same payload inserted as raw HTML MUST be seen by the detector, otherwise
+    // "nothing found" above would prove nothing. It is also the second line of defence at work: the page's
+    // Content-Security-Policy refuses to run an inline handler, so the markup is there but does not fire.
     await page.evaluate((html) => document.body.insertAdjacentHTML("beforeend", html), evil("control"));
     await page.waitForTimeout(400);
     const control = await page.evaluate(() => ({
       fired: window.__xss || 0,
       injected: document.querySelectorAll('[onerror],[onload],[id^="xss-"]').length,
+      blockedByCsp: (window.__csp || []).length,
     }));
     await ctx.close();
     log(`${inspected} views inspected (screens, tabs, dialog, invoice and report print windows); hostile text visible as plain text in ${shownAsText}; dialogs shown: ${dialogs.length}`);
     log(`detector self-check with raw HTML insertion: ${JSON.stringify(control)}`);
     await loadStores(shopFixture());
-    assert.ok(control.fired > 0 && control.injected > 0, "the XSS detector cannot see an injection — this test proves nothing");
+    assert.ok(control.injected > 0, "the XSS detector cannot see injected markup — this test proves nothing");
+    assert.equal(control.fired, 0, "an injected inline handler RAN: the Content-Security-Policy did not stop it");
+    assert.ok(control.blockedByCsp > 0, "the browser did not report blocking the injected inline handler");
     assert.deepEqual(problems, [], "hostile text executed or became markup");
     assert.deepEqual(dialogs, []);
     assert.ok(shownAsText >= 8, "the hostile text was not even displayed — the test did not exercise the screens");
@@ -1060,8 +1103,12 @@ describe("G. Components and platform", () => {
       t.skip("npm audit unavailable (offline?)");
       return;
     }
+    if (!report.metadata?.vulnerabilities) {
+      t.skip("npm audit gave no report (offline?)");
+      return;
+    }
     const v = report.metadata.vulnerabilities;
-    const worst = Object.entries(report.vulnerabilities)
+    const worst = Object.entries(report.vulnerabilities ?? {})
       .filter(([, x]) => x.severity === "critical" || x.severity === "high")
       .map(([name, x]) => `${name} (${x.severity})`);
     log(`production packages: ${JSON.stringify(v)}; high/critical: ${worst.join(", ")}`);

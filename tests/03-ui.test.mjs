@@ -343,13 +343,14 @@ describe("when the database can't be reached", () => {
     await page.context().close();
   });
 
-  test("UI-14 with MySQL actually unreachable, the error screen shows the real cause", async () => {
+  test("UI-14 with MySQL actually unreachable, the error screen explains the cause in plain words (without its address)", async () => {
     const page = await newPage(browser, { base: DEAD_DB_BASE });
     await page.goto("/");
     await page.getByText("Can't reach the database").waitFor();
     const shown = await page.locator("p", { hasText: "Database error" }).innerText();
     log(`error screen: "${shown}"`);
-    assert.match(shown, /Database error: .*ECONNREFUSED/);
+    assert.match(shown, /Database error: the database server can't be reached\. Check that MySQL is running\./);
+    assert.doesNotMatch(shown, /ECONNREFUSED|127\.0\.0\.1|::1/);
     await page.context().close();
   });
 });

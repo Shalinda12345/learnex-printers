@@ -74,6 +74,23 @@ export const ICONS = {
   layers:
     '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
   "minus-circle": '<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>',
+  "chevron-down": '<polyline points="6 9 12 15 18 9"/>',
+  "chevrons-left": '<polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>',
+  "chevrons-right": '<polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>',
+  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  "x-circle": '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+  "eye-off": '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  "log-out": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  "key-round": '<path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  "arrow-right": '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  "corner-down-left": '<polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/>',
+  loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+  database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
+  "more-horizontal": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
 };
 export function Icon({ name, size = 18, className = "", style }) {
   return (
@@ -88,6 +105,8 @@ export function Icon({ name, size = 18, className = "", style }) {
       strokeLinejoin="round"
       className={className}
       style={style}
+      aria-hidden="true"
+      focusable="false"
       dangerouslySetInnerHTML={{ __html: ICONS[name] || "" }}
     />
   );
@@ -142,3 +161,20 @@ export const Wallet = makeIcon("wallet");
 export const X = makeIcon("x");
 export const Layers = makeIcon("layers");
 export const MinusCircle = makeIcon("minus-circle");
+export const ChevronDown = makeIcon("chevron-down");
+export const ChevronsLeft = makeIcon("chevrons-left");
+export const ChevronsRight = makeIcon("chevrons-right");
+export const Info = makeIcon("info");
+export const XCircle = makeIcon("x-circle");
+export const EyeOff = makeIcon("eye-off");
+export const Lock = makeIcon("lock");
+export const LogOut = makeIcon("log-out");
+export const KeyRound = makeIcon("key-round");
+export const User = makeIcon("user");
+export const Inbox = makeIcon("inbox");
+export const Check = makeIcon("check");
+export const ArrowRight = makeIcon("arrow-right");
+export const CornerDownLeft = makeIcon("corner-down-left");
+export const Loader = makeIcon("loader");
+export const Database = makeIcon("database");
+export const MoreHorizontal = makeIcon("more-horizontal");

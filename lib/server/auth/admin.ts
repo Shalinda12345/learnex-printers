@@ -7,7 +7,7 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "@
 import { generateTemporaryPassword, hashPassword } from "@/lib/server/auth/password";
 import { revokeUserSessions, type AuthUser } from "@/lib/server/auth/session";
 import { actorOf } from "@/lib/server/auth/dal";
-import { uniqueViolation, validateProfile } from "@/lib/server/auth/accounts";
+import { assertNoIdentityClash, uniqueViolation, validateProfile } from "@/lib/server/auth/accounts";
 import { OWNER_ROLE_KEY, PERMISSION_KEYS, isPermission } from "@/lib/auth/permissions";
 
 /* =====================================================================
@@ -115,6 +115,15 @@ function assertCanManage(actor: AuthUser, target: { roleIds: number[] }, roles: 
   if (owner && target.roleIds.includes(owner.id) && !actor.isOwner) {
     throw new ForbiddenError("Only an owner can change an owner's account.", "owner_protected");
   }
+  // Resetting a password or editing/disabling an account is a way of becoming that
+  // person, so nobody may manage an account that holds permissions they don't have.
+  const held = roles.filter((r) => target.roleIds.includes(r.id));
+  if (!actor.isOwner && !held.every((r) => holdsAll(actor, r.permissions))) {
+    throw new ForbiddenError(
+      "You can't change an account that has permissions you don't have.",
+      "escalation",
+    );
+  }
 }
 
 function parseId(value: unknown) {
@@ -174,6 +183,7 @@ export async function createUser(actor: AuthUser, input: Record<string, unknown>
   const hash = await hashPassword(temporaryPassword);
   try {
     const id = await withTransaction(async (conn) => {
+      await assertNoIdentityClash(conn, profile.username, profile.email);
       const [res] = await conn.query<ResultSetHeader>(
         `INSERT INTO auth_users (username, name, email, password_hash, must_change_password, created_by)
          VALUES (?, ?, ?, ?, true, ?)`,
@@ -253,6 +263,14 @@ export async function updateUser(actor: AuthUser, rawId: unknown, input: Record<
           fields.push(`${col} = ?`);
           changes[key] = profile[key];
         }
+      }
+      if (changes.username !== undefined || changes.email !== undefined) {
+        await assertNoIdentityClash(
+          conn,
+          profile.username ?? target.username,
+          profile.email !== undefined ? profile.email : target.email,
+          id,
+        );
       }
       if (changes.status) {
         values.push(status);

@@ -21,6 +21,12 @@ const app = new URL(DATABASE_URL);
 const user = decodeURIComponent(app.username);
 const password = decodeURIComponent(app.password);
 const database = decodeURIComponent(app.pathname.replace(/^\//, ""));
+if (user.toLowerCase() === "root") {
+  console.warn(
+    "Warning: DATABASE_URL logs in as root. The app only needs its own database; use a limited account " +
+      "(e.g. learnex_app with a strong password) here and keep root in MYSQL_ADMIN_URL only.",
+  );
+}
 
 // The same session settings the app uses (lib/server/db.ts).
 const SESSION_SETUP =

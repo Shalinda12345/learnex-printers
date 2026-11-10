@@ -615,11 +615,13 @@ describe("reset and server errors", () => {
     assert.equal(Number(left.n), 0);
   });
 
-  test("API-31 if the database is down, the API answers 500 with the reason", async () => {
+  test("API-31 if the database is down, the API answers 500 with the reason in plain words — no address, port or SQL", async () => {
     // /api/auth/me is the first thing the app asks for; it must reach the database.
     const r = await new Client(DEAD_DB_BASE).get("/api/auth/me");
     log(`GET /api/auth/me on a server whose database is unreachable -> ${r.status} ${r.body?.error}`);
     assert.equal(r.status, 500);
-    assert.match(r.body.error, /Database error: .*ECONNREFUSED/);
+    assert.equal(r.body.error, "Database error: the database server can't be reached. Check that MySQL is running.");
+    // anyone can ask this question, signed in or not: it must not reveal where the database is
+    assert.doesNotMatch(r.body.error, /ECONNREFUSED|\d+\.\d+\.\d+\.\d+|::1|:\d{2,5}\b/);
   });
 });

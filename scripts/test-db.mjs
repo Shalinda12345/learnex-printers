@@ -4,9 +4,13 @@
 //   npm run test:db        (builds first; needs MySQL running and Chrome installed)
 //   npm run test:db -- 06-sales 07-stock      (only these test files)
 //
-// Starts two servers from the production build:
-//   :3311  wired to the test database
+// Ports start at 3311; set TEST_PORT_BASE to use others, and TEST_DATABASE_URL for another
+// *_test database, to run next to other work (two runs on one database wipe each other).
+//
+// Starts three servers from the production build:
+//   :3311  wired to the test database (sign-in rate limit off, so suites can sign in freely)
 //   :3312  wired to a closed port — simulates "database down"
+//   :3313  wired to the test database with the sign-in rate limit on, for the throttling tests
 import { spawn, spawnSync } from "node:child_process";
 import { createWriteStream, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -28,13 +32,15 @@ deadUrl.port = "1";
 // The test servers get their own owner-setup code (never the real one).
 const TEST_SETUP_CODE = "test-setup-" + Math.random().toString(36).slice(2);
 
+const PORT = Number(process.env.TEST_PORT_BASE) || 3311;
 const env = {
   ...process.env,
   TEST_DATABASE_URL,
   TEST_SETUP_CODE,
-  TEST_BASE_URL: "http://localhost:3311",
-  TEST_DEAD_DB_BASE_URL: "http://localhost:3312",
-  TEST_APP_PORT: "3311",
+  TEST_BASE_URL: `http://localhost:${PORT}`,
+  TEST_DEAD_DB_BASE_URL: `http://localhost:${PORT + 1}`,
+  TEST_THROTTLED_BASE_URL: `http://localhost:${PORT + 2}`,
+  TEST_APP_PORT: String(PORT),
 };
 
 console.log(`Setting up test database ${testUrl.pathname.slice(1)} ...`);
@@ -46,10 +52,13 @@ const setup = spawnSync(process.execPath, ["scripts/db-setup.mjs"], {
 if (setup.status !== 0) process.exit(setup.status ?? 1);
 
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
-function startServer(port, databaseUrl) {
+// The sign-in rate limit is off on the normal test servers: the suites sign in dozens
+// of times a minute from one address on purpose. The third server runs with the limits on.
+const NO_RATE_LIMIT = { AUTH_RATE_LIMIT: "0", AUTH_RATE_LIMIT_GLOBAL: "0" };
+function startServer(port, databaseUrl, extraEnv = NO_RATE_LIMIT) {
   return spawn(process.execPath, [nextBin, "start", "-p", String(port)], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: databaseUrl, AUTH_SETUP_CODE: TEST_SETUP_CODE },
+    env: { ...process.env, DATABASE_URL: databaseUrl, AUTH_SETUP_CODE: TEST_SETUP_CODE, ...extraEnv },
     stdio: "ignore",
   });
 }
@@ -65,7 +74,16 @@ async function waitFor(url) {
   throw new Error(`server at ${url} did not start`);
 }
 
-const servers = [startServer(3311, TEST_DATABASE_URL), startServer(3312, deadUrl.toString())];
+const servers = [
+  startServer(PORT, TEST_DATABASE_URL),
+  startServer(PORT + 1, deadUrl.toString()),
+  // real limits: 10 attempts per client and 40 in all, per minute
+  startServer(PORT + 2, TEST_DATABASE_URL, {
+    AUTH_RATE_LIMIT: "10",
+    AUTH_RATE_LIMIT_GLOBAL: "40",
+    AUTH_RATE_WINDOW_SECONDS: "60",
+  }),
+];
 const stopServers = () => servers.forEach((s) => s.kill());
 process.on("exit", stopServers);
 
@@ -73,6 +91,7 @@ let code = 1;
 try {
   await waitFor(env.TEST_BASE_URL);
   await waitFor(env.TEST_DEAD_DB_BASE_URL);
+  await waitFor(env.TEST_THROTTLED_BASE_URL);
   mkdirSync(path.join(root, "test-results"), { recursive: true });
   const logPath = path.join(root, "test-results", "db-tests.log");
   const log = createWriteStream(logPath);
@@ -86,6 +105,7 @@ try {
     "08-finance",
     "09-admin",
     "10-statements",
+    "11-security",
     "04-limitations",
   ];
   const only = process.argv.slice(2);

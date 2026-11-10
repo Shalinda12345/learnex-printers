@@ -1,6 +1,6 @@
 import "server-only";
 import { ForbiddenError, UnauthorizedError } from "@/lib/server/errors";
-import { getSessionUser, type AuthUser } from "@/lib/server/auth/session";
+import { getSessionUser, isHttps, type AuthUser } from "@/lib/server/auth/session";
 import type { Actor } from "@/lib/server/audit";
 
 /* =====================================================================
@@ -31,6 +31,10 @@ export function requirePermission(user: AuthUser, ...anyOf: string[]) {
  * (The SameSite=Lax session cookie is the first line of defense.)
  */
 export function requireSameOrigin(request: Request) {
+  // Browsers say where a request comes from; "cross-site" / "same-site" (another subdomain) is never us.
+  const site = request.headers.get("sec-fetch-site");
+  if (site === "cross-site" || site === "same-site")
+    throw new ForbiddenError("Cross-site request refused.", "cross_site");
   const origin = request.headers.get("origin");
   if (!origin) return; // not a browser cross-site request (e.g. scripts, tests)
   const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
@@ -39,6 +43,16 @@ export function requireSameOrigin(request: Request) {
     originHost = new URL(origin).host;
   } catch {}
   if (!host || originHost !== host) throw new ForbiddenError("Cross-site request refused.", "cross_site");
+}
+
+/**
+ * With AUTH_REQUIRE_HTTPS=1 in .env, passwords are only accepted over HTTPS (through the
+ * TLS reverse proxy described in the README), so they can never cross the network in clear.
+ * Off by default: the app is usually first run on plain HTTP.
+ */
+export function requireHttpsIfConfigured(request: Request) {
+  if (process.env.AUTH_REQUIRE_HTTPS !== "1" || isHttps(request)) return;
+  throw new ForbiddenError("Sign in over HTTPS only. Ask your administrator for the secure address.", "https_required");
 }
 
 export const actorOf = (user: AuthUser): Actor => ({ userId: user.id, username: user.username });

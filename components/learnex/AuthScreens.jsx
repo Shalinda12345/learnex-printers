@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { changePassword, login, registerOwner } from "@/lib/learnex/auth-client";
 import {
+  GateButton,
+  GateError,
   GateField,
+  GateHeading,
+  GateLink,
+  GateNotice,
   GateShell,
-  bodyStyle,
-  buttonStyle,
-  errorStyle,
-  headingStyle,
-  linkStyle,
+  GateText,
 } from "@/components/learnex/gate";
+import { KeyRound, Lock, ShieldCheck } from "@/components/learnex/icons";
 
 const MIN_PASSWORD = 8;
 
@@ -45,12 +47,12 @@ export function SetupOwnerScreen({ setupAvailable, onDone }) {
   if (!setupAvailable) {
     return (
       <GateShell>
-        <h2 style={headingStyle}>Create the owner account</h2>
-        <p style={bodyStyle}>
+        <GateHeading icon={ShieldCheck}>Create the owner account</GateHeading>
+        <GateText>
           No accounts exist yet. To create the first (owner) account, the server needs a setup code: add a
           line
           <b> AUTH_SETUP_CODE=…</b> with a long secret value to the server&apos;s .env file and restart it.
-        </p>
+        </GateText>
       </GateShell>
     );
   }
@@ -66,13 +68,13 @@ export function SetupOwnerScreen({ setupAvailable, onDone }) {
   }
 
   return (
-    <GateShell>
-      <h2 style={headingStyle}>Create the owner account</h2>
-      <p style={bodyStyle}>
+    <GateShell wide>
+      <GateHeading icon={ShieldCheck}>Create the owner account</GateHeading>
+      <GateText>
         This is the first account. The owner can do everything, including adding staff accounts and choosing
         what each person may do. You&apos;ll find the setup code in the server&apos;s .env file
         (AUTH_SETUP_CODE).
-      </p>
+      </GateText>
       <form onSubmit={submit}>
         <GateField
           label="Setup code"
@@ -81,15 +83,17 @@ export function SetupOwnerScreen({ setupAvailable, onDone }) {
           autoComplete="off"
           required
         />
-        <GateField label="Your name" value={form.name} onChange={set("name")} autoComplete="name" required />
-        <GateField
-          label="Username"
-          value={form.username}
-          onChange={set("username")}
-          autoComplete="username"
-          hint="Used to sign in, e.g. “aarav”."
-          required
-        />
+        <div className="grid sm:grid-cols-2 gap-x-4">
+          <GateField label="Your name" value={form.name} onChange={set("name")} autoComplete="name" required />
+          <GateField
+            label="Username"
+            value={form.username}
+            onChange={set("username")}
+            autoComplete="username"
+            hint="Used to sign in, e.g. “aarav”."
+            required
+          />
+        </div>
         <GateField
           label="Email (optional)"
           type="email"
@@ -97,27 +101,30 @@ export function SetupOwnerScreen({ setupAvailable, onDone }) {
           onChange={set("email")}
           autoComplete="email"
         />
-        <GateField
-          label="Password"
-          type="password"
-          value={form.password}
-          onChange={set("password")}
-          autoComplete="new-password"
-          hint={`At least ${MIN_PASSWORD} characters.`}
-          required
-        />
-        <GateField
-          label="Repeat password"
-          type="password"
-          value={form.confirm}
-          onChange={set("confirm")}
-          autoComplete="new-password"
-          required
-        />
-        {error && <p style={errorStyle}>{error}</p>}
-        <button type="submit" style={buttonStyle} disabled={busy}>
+        <div className="grid sm:grid-cols-2 gap-x-4">
+          <GateField
+            label="Password"
+            type="password"
+            value={form.password}
+            onChange={set("password")}
+            autoComplete="new-password"
+            hint={`At least ${MIN_PASSWORD} characters.`}
+            meter
+            required
+          />
+          <GateField
+            label="Repeat password"
+            type="password"
+            value={form.confirm}
+            onChange={set("confirm")}
+            autoComplete="new-password"
+            required
+          />
+        </div>
+        <GateError>{error}</GateError>
+        <GateButton type="submit" busy={busy}>
           {busy ? "Creating…" : "Create Owner Account"}
-        </button>
+        </GateButton>
       </form>
     </GateShell>
   );
@@ -138,8 +145,9 @@ export function LoginScreen({ onDone, notice }) {
 
   return (
     <GateShell>
-      <h2 style={headingStyle}>Sign in to LEARNEX ERP</h2>
-      {notice && <p style={{ ...bodyStyle, color: "#b45309" }}>{notice}</p>}
+      <GateHeading>Sign in to LEARNEX ERP</GateHeading>
+      <GateText>Welcome back — enter your details to continue.</GateText>
+      {notice && <GateNotice>{notice}</GateNotice>}
       <form onSubmit={submit}>
         <GateField
           label="Username or email"
@@ -157,12 +165,13 @@ export function LoginScreen({ onDone, notice }) {
           autoComplete="current-password"
           required
         />
-        {error && <p style={errorStyle}>{error}</p>}
-        <button type="submit" style={buttonStyle} disabled={busy}>
+        <GateError>{error}</GateError>
+        <GateButton type="submit" busy={busy}>
           {busy ? "Signing in…" : "Sign In"}
-        </button>
+        </GateButton>
       </form>
-      <p style={{ ...bodyStyle, margin: "16px 0 0", fontSize: 12, textAlign: "center" }}>
+      <p className="mt-5 text-xs text-center text-slate-500 flex items-center justify-center gap-1.5">
+        <Lock size={12} className="shrink-0" />
         Forgot your password? Ask the owner or an administrator to reset it.
       </p>
     </GateShell>
@@ -173,19 +182,17 @@ export function LoginScreen({ onDone, notice }) {
 export function ForcedPasswordChangeScreen({ user, onDone, onSignOut }) {
   return (
     <GateShell>
-      <h2 style={headingStyle}>Choose your own password</h2>
-      <p style={bodyStyle}>
+      <GateHeading icon={KeyRound}>Choose your own password</GateHeading>
+      <GateText>
         Welcome, {user.name}. You signed in with a one-time password — choose a password only you know before
         continuing.
-      </p>
+      </GateText>
       <PasswordChangeForm
         onDone={onDone}
         currentLabel="One-time password"
         submitLabel="Save Password & Continue"
       />
-      <button style={linkStyle} onClick={onSignOut}>
-        Sign out
-      </button>
+      <GateLink onClick={onSignOut}>Sign out</GateLink>
     </GateShell>
   );
 }
@@ -223,6 +230,7 @@ export function PasswordChangeForm({
         onChange={set("next")}
         autoComplete="new-password"
         hint={`At least ${MIN_PASSWORD} characters.`}
+        meter
         required
       />
       <GateField
@@ -233,10 +241,10 @@ export function PasswordChangeForm({
         autoComplete="new-password"
         required
       />
-      {error && <p style={errorStyle}>{error}</p>}
-      <button type="submit" style={buttonStyle} disabled={busy}>
+      <GateError>{error}</GateError>
+      <GateButton type="submit" busy={busy}>
         {busy ? "Saving…" : submitLabel}
-      </button>
+      </GateButton>
     </form>
   );
 }
